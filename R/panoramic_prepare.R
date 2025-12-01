@@ -1,4 +1,9 @@
 #' Internal: reorder hull vertices counterclockwise
+#' Orders a set of 2D coordinates counterclockwise around their centroid.
+#' Mainly used for convex spatial window construction to ensure correct polygon orientation for spatstat owin objects. 
+#'
+#' @param coords Numeric matrix of coordinates (columns: x, y).
+#' @return Reordered numeric matrix of coordinates
 #' @keywords internal
 .reorder_ccw <- function(coords) {
   if (!is.matrix(coords)) coords <- as.matrix(coords)
@@ -9,14 +14,30 @@
 
 #' Prepare PANORAMIC inputs from a list of SpatialExperiment objects
 #'
-#' @param spe_list named or unnamed list of SpatialExperiment (one per sample)
-#' @param design data.frame/DataFrame with at least \code{sample}, \code{group}
-#' @param cell_type character scalar; name of colData column with cell type labels
-#' @param min_cells integer; drop cell types with fewer than this per sample
-#' @param concavity numeric passed to concaveman::concaveman()
-#' @param window one of "concave","convex","rect"
-#' @param BPPARAM BiocParallel param for optional parallel prep
-#' @return list of prepared SpatialExperiment with cached PPP in metadata
+#' Creates SpatialExperiment objects ready for PANORAMIC spatial analyses. 
+#' Cell type labels are harmonized, rare cell types (fewer than \code{min_cells}) are dropped per sample, 
+#' and a spatial window is computed. Cached spatstat objects are stored within each SpatialExperiment's metadata. 
+#' 
+#' @param spe_list Named or unnamed list of SpatialExperiment (one per sample)
+#' @param design data.frame with at least columns \code{sample}, \code{group} to map samples for meta-analysis. If only one group is used, give all the same group label.
+#' @param cell_type Character; name of SpatialExperiment colData column holding cell type labels
+#' @param min_cells Integer. Cell types with fewer than this count (per sample) are dropped.
+#' @param concavity Numeric passed to concaveman::concaveman(). Controls level of hull detail. 1 is highly detailed, \code{Inf} is a convex hull.
+#' @param window one of "concave","convex","rect". Typically use concave.
+#' @param BPPARAM BiocParallel param for optional parallel processing.
+#'
+#' @return List of SpatialExperiment objects with metadata slot \code{panoramic} containing \code{ppp}, cell-type table, spatial window, group/sample info.
+#' 
+#' @details 
+#' This step computes per-sample spatial windows to exclude background, filters
+#' rare cell types separately per sample, builds consistent cell-type factor levels, 
+#' and caches spatstat objects and type tables for PANORAMIC's spatial statistics. 
+#' @examples
+#' \dontrun{
+#' # For multiple samples: 
+#' prepped <- panoramic_prepare(spe_list, design, min_cells = 5)
+#' }
+#' 
 #' @export
 panoramic_prepare <- function(
     spe_list, design, cell_type = "cell_type",
@@ -61,7 +82,7 @@ panoramic_prepare <- function(
     if (!all(keep)) {
       spe <- spe[, keep, drop = FALSE]
       coords <- coords[keep, , drop = FALSE]
-      ct <- ct[keep, drop = TRUE]
+      ct <- ct[keep, drop = FALSE]      
     }
     
     # window
@@ -99,4 +120,13 @@ panoramic_prepare <- function(
   out
 }
 
+#' Pipe-compatible null operator
+#' 
+#' Returns b if a is NULL, otherwise a. 
+#' 
+#' @param a, b Objects to test; if a is NULL b is returned. 
+#' 
+#' @return The non-NULL object. 
+#' 
+#' @keywords internal
 `%||%` <- function(a,b) if (is.null(a)) b else a

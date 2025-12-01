@@ -1,20 +1,67 @@
-#' Internal: generate CT pairs present in all/most samples
+#' Internal: generate cell-type pairs
+#' 
+#' Construct the set of cell-type pairs to analyze, optionally including 
+#' self-pairs and filtering to cell types present in at least a given 
+#' fraction of samples.
+#' 
+#' @param prep_list List of prepared SpatialExperiment objects, each with \code{metadata(spe)$panoramic$ppp} containing a marked spatstat point pattern. 
+#' @param include_self Logical. If \code{TRUE}, include (ct, ct) self-pairs. If \code{FALSE}, only cross-type pairs are returned. 
+#' @param min_presence Numeric in \eqn{[0, 1]}. Minimum fraction of samples in which a cell type must appear to be included. \code{0} keeps all observed types, \code{0.5} requires presence in at least half of samples. 
+#' 
+#' @return A data.frame with columns \code{ct1} and \code{ct2}. 
+#' 
 #' @keywords internal
-.panoramic_pairs <- function(prep_list, cell_type = "cell_type", include_self = TRUE, min_presence = 1.0) {
-  stopifnot(min_presence > 0 && min_presence <= 1)
-  cts_by_sample <- lapply(prep_list, function(spe) levels(spatstat.geom::marks(spe@metadata$panoramic$ppp)))
-  shared <- Reduce(intersect, cts_by_sample)
-  if (length(shared) == 0L) stop("No shared cell types found")
-  cts <- shared
-  pairs <- if (include_self) expand.grid(ct1 = cts, ct2 = cts, stringsAsFactors = FALSE) else {
-    utils::combn(cts, 2, simplify = FALSE) |> lapply(\(x) data.frame(ct1 = x[1], ct2 = x[2])) |> 
+.panoramic_pairs <- function(prep_list,
+                             include_self = TRUE, min_presence = 0.0) {
+  
+  stopifnot(min_presence >= 0 && min_presence <= 1)
+  
+  # Get cell types from each sample
+  cts_by_sample <- lapply(prep_list, function(spe) {
+    levels(spatstat.geom::marks(spe@metadata$panoramic$ppp))
+  })
+  
+  # This includes cell types present in ANY sample
+  all_cts <- Reduce(union, cts_by_sample)
+  
+  if (length(all_cts) == 0L) stop("No cell types found")
+  
+  # Optional: Filter by minimum presence across samples
+  if (min_presence > 0) {
+    ct_counts <- table(unlist(cts_by_sample))
+    min_samples <- ceiling(length(prep_list) * min_presence)
+    all_cts <- names(ct_counts)[ct_counts >= min_samples]
+    
+    if (length(all_cts) == 0L) {
+      stop("No cell types present in at least ", 
+           round(min_presence * 100), "% of samples")
+    }
+  }
+  
+  cts <- sort(all_cts)
+  
+  # Generate pairs
+  pairs <- if (include_self) {
+    expand.grid(ct1 = cts, ct2 = cts, stringsAsFactors = FALSE)
+  } else {
+    utils::combn(cts, 2, simplify = FALSE) |> 
+      lapply(\(x) data.frame(ct1 = x[1], ct2 = x[2])) |> 
       dplyr::bind_rows()
   }
+  
   pairs
 }
 
-# ---------- helpers ----------------------------------------------------------
-
+#' Internal: quiet Loh bootstrap wrapper
+#' 
+#' Run \code{spatstat.explore::lohboot()} while suppressing console output, 
+#' returning the bootstrap object invisibly for further summarization. 
+#' 
+#' @param ... Arguments passed to \code{spatstat.explore::lohboot()}. 
+#' 
+#' @return A Loh bootstrap object as returned by \code{spatstat.explore::lohboot()}.
+#' 
+#' @keywords internal
 .lohboot_quiet <- function(...) {
   res <- NULL
   suppressWarnings(utils::capture.output({
@@ -23,11 +70,25 @@
   res
 }
 
+#' Internal: safe interpolation on a common radius grid
+#' 
+#' Interpolate values \code{y} at target \code{xout} using \code{stats::aprox()}, 
+#' handling missing/non-finite values and low sample sizes. 
+#' 
+#' @param x Numeric vector of original inputs x.
+#' @param y Numeric vector of original y-values.
+#' @param xout Numeric vector of target x-values. 
+#' 
+#' @return Numeric vector of interpolated values, length \code{length(xout)}. 
+#' 
+#' @keywords internal
 .safe_approx <- function(x, y, xout) {
   ok <- is.finite(x) & is.finite(y)
   n  <- sum(ok)
   if (n >= 2L) {
-    stats::approx(x[ok], y[ok], xout = xout, rule = 2, ties = "ordered")$y
+    stats::approx(x[ok], y[ok], xout = xout, rule = 1, ties = "ordered")$y
+    # stats::approx(x[ok], y[ok], xout = xout, rule = 2, ties = "ordered")$y
+    
   } else if (n == 1L) {
     rep(y[ok][1], length(xout))
   } else {
@@ -35,8 +96,20 @@
   }
 }
 
-# ---------- corrected lohboot summarizer ------------------------------------
-# Derives variance from CI half-width when var/sd are absent; keeps lengths aligned
+#' Internal: summarize Loh bootstrap to (r, yi, vi)
+#' 
+#' Convert a spatstat Loh bootstrap object to aligned vectors of radii, 
+#' centered estiamtes, and variance. Variance is taken directly if present, 
+#' reconstructed from confidence intervale if needed, or computed from 
+#' simulation replicates as a fallback. 
+#' 
+#' @param loh_obj Loh bootstrap object returned by spatstat's L/K-summary functions with \code{global=TRUE}. 
+#' @param center_L Logical. If \code{TRUE}, center the estimate by the theoretical curve (e.g. L(r)-r) when available.
+#' @param conf Numeric confidence level used when reconstructing variance from confidence interval half-width. 
+#' 
+#' @return A data.frame with numeric columns \code{r}, \code{yi}, and \code{vi}, or \code{NULL} if the object cannot be parsed. 
+#' 
+#' @keywords internal
 .summarize_lohboot <- function(loh_obj, center_L = TRUE, conf = 0.95) {
   df <- try(as.data.frame(loh_obj), silent = TRUE)
   if (inherits(df, "try-error") || NROW(df) == 0L) return(NULL)
@@ -101,9 +174,24 @@
   data.frame(r = r, yi = yi, vi = vi)
 }
 
-# ---------- per-pair × per-sample worker (uses µm units; never errors) ------
+#' Internal: compute spatial stats for one pair in one sample
+#' 
+#' Compute a spatial summary curve and bootstrap variance for a single
+#' cell-type pair within a single prepared sample, evaluated on a common 
+#' radius grid. 
+#' 
+#' @param meta The \code{metadata$panoramic} list for one sample, containing at least a spatstat \code{ppp} object and a \code{marks_tab} table. 
+#' @param ct1,ct2 Character. Cell-type labels. 
+#' @param stat Character. Summary statistic ("Lcross", "Kcross", "Lest", "Kest"). 
+#' @param nsim Integer. Number of Loh bootstrap simulations. 
+#' @param correction Character. Edge correction passed to spatstat.
+#' @param radii_um Numeric vector of radii (microns) on which to summarize.
+#' 
+#' @return A data.frame with columns \code{radius_um}, \code{yi}, and \code{vi}, filled with \code{NA} if insufficient cells of either type are present. 
+#' 
+#' @keywords internal
 .one_pair_one_sample <- function(meta, ct1, ct2, stat = "Lcross",
-                                 nsim = 200, correction = "translate",
+                                 nsim = 100, correction = "translate",
                                  radii_um) {
   tab <- meta$marks_tab
   n1 <- unname(tab[ct1]); n2 <- unname(tab[ct2])
@@ -111,7 +199,7 @@
     return(data.frame(radius_um = radii_um, yi = NA_real_, vi = NA_real_))
   }
   
-  X <- meta$ppp  # keep original units (µm); do not rescale
+  X <- meta$ppp
   
   if (!identical(ct1, ct2) && stat %in% c("Lcross","Kcross")) {
     fun <- if (stat == "Lcross") spatstat.explore::Lcross else spatstat.explore::Kcross
@@ -139,31 +227,34 @@
   data.frame(radius_um = radii_um, yi = yi, vi = vi)
 }
 
-
-
-#' Compute pairwise spatial stats with bootstrap across samples
-#'
-#' Returns a SummarizedExperiment with assays:
+#' Compute pairwise spatial statistics for PANORAMIC
+#' 
+#' Compute pairwise spatial summary curves (e.g. Lcross) and bootstrap
+#' variances for all requested cell-type pairs and radii across multiple
+#' prepared samples, returning a SummarizedExperiment. 
+#' 
+#' @param prep List of prepared SpatialExperiment objects as returned by \code{panoramic_prepare()}, 
+#'  each with \code{metadata(spe)$panoramic}. 
+#' @param pairs Either "auto" (generate all cell-type pairs including self-pairs) 
+#'  or a data.frame with columns \code{ct1}, \code{ct2}. 
+#' @param radii_um Numeric vector of radii (microns) at which to evaluate the colocalization statistic. 
+#' @param stat Character. Summary statistic ("Lcross", "Lest", "Kcross", "Kest"). 
+#' @param nsim Integer. Number of Loh bootstrap simulations per sample/pair. 
+#' @param correction Chatacter. Edge correction method for spatstat ("translate", "border", ...). 
+#' @param keep_boot Logical. Reserved for future use (keeping full bootstrap objects). 
+#' 
+#' @return A SummarizedExperiment with : 
 #' \itemize{
-#'   \item \code{yi} feature × sample effects
-#'   \item \code{vi} feature × sample variances (bootstrap)
+#'  \item assay "yi": centered estimates per (ct1, ct2, radius) feature and sample. 
+#'  \item assay "vi": variance estimates aligned to "yi".
 #' }
-#' RowData stores \code{ct1}, \code{ct2}, \code{radius_um}, \code{stat}.
-#'
-#' @param prep list from \code{pano_prepare()}
-#' @param pairs "auto" or data.frame with ct1, ct2
-#' @param radii_um numeric vector of radii at which to evaluate
-#' @param stat "Lcross" (default) or "Kcross" / "Lest" / "Kest"
-#' @param nsim bootstrap iterations
-#' @param correction spatstat edge correction
-#' @param keep_boot if TRUE, stores lohboot objects in metadata
-#' @param seed RNG seed
-#' @param BPPARAM BiocParallel param
-#' @return SummarizedExperiment
+#' rowData stores \code{ct1}, \code{ct2}, \code{radius_um}, \code{stat}
+#' colData stores \code{sample} and \code{group}. 
+#' 
 #' @export
 panoramic_spatialstats <- function(
     prep, pairs = "auto", radii_um, stat = "Lcross",
-    nsim = 200, correction = "translate", keep_boot = FALSE, seed = 123,
+    nsim = 100, correction = "translate", keep_boot = FALSE, seed = 123,
     BPPARAM = BiocParallel::SerialParam()
 ) {
   stopifnot(is.list(prep), length(prep) >= 2, length(radii_um) >= 1)
@@ -174,21 +265,9 @@ panoramic_spatialstats <- function(
   }
   
   samples <- names(prep)
-  # Compute per-sample per-pair curves, then interpolate at radii_um
+  
+  # Compute per-sample per-pair curves
   withr::with_seed(seed, {
-    # per_sample <- BiocParallel::bplapply(samples, function(sid) {
-    #   meta <- prep[[sid]]@metadata$panoramic
-    #   cur <- lapply(seq_len(nrow(pairs)), function(i) {
-    #     pr <- pairs[i,]
-    #     df <- .one_pair_one_sample(meta, pr$ct1, pr$ct2, stat, nsim, correction)
-    #     # Interpolate yi/vi at requested radii (df$r in rescaled units; assume microns if inputs were microns)
-    #     yi <- stats::approx(df$r, df$yi, xout = radii_um, rule = 2, ties = "ordered")$y
-    #     vi <- stats::approx(df$r, df$vi, xout = radii_um, rule = 2, ties = "ordered")$y
-    #     data.frame(ct1 = pr$ct1, ct2 = pr$ct2, radius_um = radii_um, yi = yi, vi = vi)
-    #   })
-    #   dplyr::bind_rows(cur)
-    # }, BPPARAM = BPPARAM)
-    
     per_sample <- BiocParallel::bplapply(samples, function(sid) {
       meta <- prep[[sid]]@metadata$panoramic
       
@@ -200,9 +279,9 @@ panoramic_spatialstats <- function(
           stat       = stat,
           nsim       = nsim,
           correction = correction,
-          radii_um   = radii_um   # <-- pass through
+          radii_um   = radii_um 
         )
-        names(df)[names(df) == "r"] <- "radius_um"   # <-- rename here
+        names(df)[names(df) == "r"] <- "radius_um"
         df$ct1 <- pr$ct1
         df$ct2 <- pr$ct2
         df$key <- paste(df$ct1, df$ct2, df$radius_um, sep = "|")
@@ -213,11 +292,14 @@ panoramic_spatialstats <- function(
     }, BPPARAM = BPPARAM)
   })
   
-  # Assemble SummarizedExperiment: features = (ct1,ct2,r); samples = columns
-  feat <- dplyr::bind_rows(per_sample[[1L]])[, c("ct1","ct2","radius_um")]
-  feat <- unique(feat)
+  # Build feature list from ALL samples
+  all_features <- lapply(per_sample, function(df) {
+    unique(df[, c("ct1", "ct2", "radius_um")])
+  })
+  feat <- unique(dplyr::bind_rows(all_features))
   feat$key <- paste(feat$ct1, feat$ct2, feat$radius_um, sep = "|")
   
+  # Build matrices
   make_mat <- function(slot) {
     m <- matrix(NA_real_, nrow = nrow(feat), ncol = length(samples),
                 dimnames = list(feat$key, samples))
@@ -251,11 +333,31 @@ panoramic_spatialstats <- function(
   se
 }
 
-#' One-liner convenience: prepare + spatialstats
+
+#' PANORAMIC: prepare and compute spatial statistics
+#' 
+#' One-line convenience wrapper that calles \code{panoramic_prepare()} followed 
+#' by \code{panoramic_spatialstats()} to produce the PANORAMIC
+#' SummarizedExperiment for donwnstream meta-analysis. 
+#' 
+#' @inheritParams panoramic_prepare
+#' @inheritParams panoramic_spatialstats
+#' 
+#' @return A SummerizedExperiment as described in \code{panoramic_spatialstats()}. 
+#'
+#' @examples
+#' \dontrun{
+#' se <- panoramic(
+#'   spe_list, 
+#'   design=design, 
+#'   radii_um = c(50, 75, 100)
+#' )
+#' }
+#' 
 #' @export
 panoramic <- function(
     spe_list, design, cell_type = "cell_type",
-    pairs = "auto", radii_um, stat = "Lcross", nsim = 200,
+    pairs = "auto", radii_um, stat = "Lcross", nsim = 100,
     correction = "translate", min_cells = 5L, concavity = 50, window = "concave",
     keep_boot = FALSE, seed = 123,
     BPPARAM = BiocParallel::SerialParam()
