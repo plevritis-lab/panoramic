@@ -32,6 +32,7 @@ library(ggplot2)
 set.seed(123)
 ```
 
+First, we will simulate some spatial data with three cell types: (A), (B), and (C). The first group of samples will be randomly dispersed in the tissue area, while the second group of samples with exhibit more clustering of cell types. We will also create a design matrix to keep track of which samples belong to each group. 
 ```{r}
 # Helper: turn a data.frame into a SpatialExperiment -----------------------
 df_to_spe <- function(df) {
@@ -126,6 +127,7 @@ design <- data.frame(
 
 ```
 
+Visualize the samples. 
 ```{r}
 plot_df <- do.call(rbind, lapply(spe_list, function(spe) {
   coords <- SpatialExperiment::spatialCoords(spe)
@@ -144,8 +146,9 @@ ggplot(plot_df, aes(x = x, y = y, color = cell_type)) +
 
 
 ```
-
+Next, we will run the PANORAMIC workflow. We will specify the spatial distance of colocalization a 10 micron, and we will use the Ripley's cross-L function as our spatial statistic. For now, we will use 50 simulations for our spatial bootstrapping, but when running this on real data, we recommend running nim >= 100. 
 ```{r}
+# Preparation step and calculation of spatial statistics + bootstrapping. 
 se <- panoramic(
   spe_list,
   design      = design,
@@ -156,9 +159,11 @@ se <- panoramic(
   BPPARAM     = BiocParallel::SerialParam()
 )
 
+# Meta-analysis step to pool estimates robustly across multiple spatial samples. 
 se_meta <- panoramic_meta(se, tau2 = "SJ", group_col = "group")
-se_diff <- panoramic_compare_groups(se_meta, group1 = "group1", group2 = "group2")
 
+# Differential testing step to compare colocalization estimates between groups. 
+se_diff <- panoramic_compare_groups(se_meta, group1 = "group1", group2 = "group2")
 ```
 
 ```{r}
@@ -168,7 +173,6 @@ plot_forest(se_meta,
             ct2 = "(B)", 
             show_heterogeneity = TRUE)
 ```
-
 
 
 ```{r}
@@ -182,6 +186,8 @@ res |> filter(fdr_diff < 0.05)
 # colocalization betweeen various pairs of cell types. 
 plot_volcano(se_diff)
 ```
+
+We can also visualize our differential testing results as a network and perform clustering to discover subnetworks of colocalization across mutliple cell types. In this toy example we only have three cell types, but in larger settings, you can see colocalization subnetworks of 2+ cell types. 
 ```{r}
 net <- create_spatial_network(se_diff,
                               fdr_threshold = 0.9,
