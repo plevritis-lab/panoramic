@@ -390,6 +390,7 @@ plot_forest <- function(se_meta, ct1, ct2, radius_um = NULL,
 #' @param directed Logical. If TRUE, keep edges directed as
 #'   (ct1 -> ct2). If FALSE (default), create a symmetric
 #'   undirected network by adding reversed edges before simplification.
+#' @param leiden_resolution Numeric. Clustering resolution for the Leiden algorithm 
 #'
 #' @return A list with components:
 #' \itemize{
@@ -404,14 +405,14 @@ plot_forest <- function(se_meta, ct1, ct2, radius_um = NULL,
 #' @export
 create_spatial_network <- function(se_diff,
                                    fdr_threshold = 0.05,
-                                   directed = FALSE) {
+                                   directed = FALSE, 
+                                   leiden_resolution = 1.0) {
 
   results_df <- as.data.frame(SummarizedExperiment::rowData(se_diff))
 
   edges <- results_df |>
     dplyr::filter(
-      fdr_diff < fdr_threshold,
-      z_diff < 0
+      fdr_diff < fdr_threshold
     ) |>
     dplyr::mutate(
       from = gsub("[(){}|]", "", ct1),
@@ -446,7 +447,7 @@ create_spatial_network <- function(se_diff,
     g,
     objective_function   = "modularity",
     weights              = igraph::E(g)$weight,
-    resolution_parameter = 1.2
+    resolution = leiden_resolution
   )
 
   mod <- igraph::modularity(g, membership = clusters$membership,

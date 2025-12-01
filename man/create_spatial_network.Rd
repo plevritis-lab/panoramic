@@ -4,7 +4,12 @@
 \alias{create_spatial_network}
 \title{Construct spatial colocalization network from PANORAMIC results}
 \usage{
-create_spatial_network(se_diff, fdr_threshold = 0.05, directed = FALSE)
+create_spatial_network(
+  se_diff,
+  fdr_threshold = 0.05,
+  directed = FALSE,
+  leiden_resolution = 1
+)
 }
 \arguments{
 \item{se_diff}{A SummarizedExperiment returned by
@@ -17,6 +22,8 @@ significant edges (default 0.05).}
 \item{directed}{Logical. If TRUE, keep edges directed as
 (ct1 -> ct2). If FALSE (default), create a symmetric
 undirected network by adding reversed edges before simplification.}
+
+\item{leiden_resolution}{Numeric. Clustering resolution for the Leiden algorithm}
 }
 \value{
 A list with components:
