@@ -32,5 +32,5 @@ se <- panoramic(
 Synthesize spatial informations across samples in a group, then test for differences
 ```r
 se_meta <- panoramic_meta(se, tau2="SJ")
-se_diff <- panoramic_test_groups(se_meta)
+se_diff <- panoramic_compare_groups(se_meta)
 ```
