@@ -2,14 +2,14 @@
 % Please edit documentation in R/panoramic-spatialstats.R
 \name{panoramic_spatialstats}
 \alias{panoramic_spatialstats}
-\title{Compute pairwise spatial stats with bootstrap across samples}
+\title{Compute pairwise spatial statistics for PANORAMIC}
 \usage{
 panoramic_spatialstats(
   prep,
   pairs = "auto",
   radii_um,
   stat = "Lcross",
-  nsim = 200,
+  nsim = 100,
   correction = "translate",
   keep_boot = FALSE,
   seed = 123,
@@ -17,32 +17,37 @@ panoramic_spatialstats(
 )
 }
 \arguments{
-\item{prep}{list from \code{pano_prepare()}}
+\item{prep}{List of prepared SpatialExperiment objects as returned by \code{panoramic_prepare()},
+each with \code{metadata(spe)$panoramic}.}
 
-\item{pairs}{"auto" or data.frame with ct1, ct2}
+\item{pairs}{Either "auto" (generate all cell-type pairs including self-pairs)
+or a data.frame with columns \code{ct1}, \code{ct2}.}
 
-\item{radii_um}{numeric vector of radii at which to evaluate}
+\item{radii_um}{Numeric vector of radii (microns) at which to evaluate the colocalization statistic.}
 
-\item{stat}{"Lcross" (default) or "Kcross" / "Lest" / "Kest"}
+\item{stat}{Character. Summary statistic ("Lcross", "Lest", "Kcross", "Kest").}
 
-\item{nsim}{bootstrap iterations}
+\item{nsim}{Integer. Number of Loh bootstrap simulations per sample/pair.}
 
-\item{correction}{spatstat edge correction}
+\item{correction}{Chatacter. Edge correction method for spatstat ("translate", "border", ...).}
 
-\item{keep_boot}{if TRUE, stores lohboot objects in metadata}
+\item{keep_boot}{Logical. Reserved for future use (keeping full bootstrap objects).}
 
-\item{seed}{RNG seed}
+\item{seed}{Integer random seed for reproducible bootstrap simulations.}
 
-\item{BPPARAM}{BiocParallel param}
+\item{BPPARAM}{A BiocParallelParam object controlling parallelisation across samples.}
 }
 \value{
-SummarizedExperiment
+A SummarizedExperiment with :
+\itemize{
+\item assay "yi": centered estimates per (ct1, ct2, radius) feature and sample.
+\item assay "vi": variance estimates aligned to "yi".
+}
+rowData stores \code{ct1}, \code{ct2}, \code{radius_um}, \code{stat}
+colData stores \code{sample} and \code{group}.
 }
 \description{
-Returns a SummarizedExperiment with assays:
-\itemize{
-\item \code{yi} feature × sample effects
-\item \code{vi} feature × sample variances (bootstrap)
-}
-RowData stores \code{ct1}, \code{ct2}, \code{radius_um}, \code{stat}.
+Compute pairwise spatial summary curves (e.g. Lcross) and bootstrap
+variances for all requested cell-type pairs and radii across multiple
+prepared samples, returning a SummarizedExperiment.
 }

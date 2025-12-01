@@ -2,24 +2,73 @@
 % Please edit documentation in R/panoramic-meta.R
 \name{panoramic_meta}
 \alias{panoramic_meta}
-\title{Random-effects pooling (feature-wise)}
+\title{Random-effects meta-analysis of PANORAMIC features
+Perform feature-wise random-effects meta-analysis on PANORAMIC spatial
+statistics, optionally estimating separate between-sample variances
+(\eqn{\tau^2}) per group, which is recommended. Pooled estimates and diagnostics are written
+into \code{rowData(se)}.}
 \usage{
 panoramic_meta(
   se,
   tau2 = c("SJ", "REML", "DL"),
-  moderators = NULL,
+  group_col = NULL,
   BPPARAM = BiocParallel::SerialParam()
 )
 }
 \arguments{
-\item{se}{SummarizedExperiment from \code{pano_spatialstats()}}
+\item{se}{A \code{SummarizedExperiment} produced by
+\code{panoramic_spatialstats()} or \code{panoramic()}, containing
+assays \code{"yi"} (effect estimates) and \code{"vi"} (within-sample variances) for each feature (ct1, ct2, radius) and sample.}
 
-\item{tau2}{estimator for between-sample variance ("SJ","REML","DL")}
+\item{tau2}{Character. Estimator for the between-sample variance \eqn{\tau^2}. One of \code{"SJ"} (Sidik-Jonkman), \code{"REML"},
+or \code{"DL"} (DerSimonian-Laird), passed to \code{metafor::rma.uni()}.}
 
-\item{moderators}{optional data.frame with per-sample moderators (columns align to colData rows)}
+\item{group_col}{Optional character scalar giving the name of a column
+in \code{colData(se)} that defines groups (e.g. treatment) for
+group-specific pooling. If \code{NULL}, a single meta-analysis is
+fitted across all samples for each feature.}
 
-\item{BPPARAM}{BiocParallel param}
+\item{BPPARAM}{A \code{BiocParallelParam} object controlling
+parallelization across features (rows). Defaults to
+\code{BiocParallel::SerialParam()}.}
+}
+\value{
+The input \code{SummarizedExperiment}, with additional columns appended to \code{rowData(se)}:
+\itemize{
+\item If \code{group_col} is \code{NULL}, columns:
+\code{mu_hat}, \code{se_mu}, \code{tau2}, \code{Q}, \code{I2}, \code{k}, \code{p_mu}.
+\item If \code{group_col} is provided, the same set of columns
+is created per group, prefixed by a group label, e.g. \code{GroupA_mu_hat}, etc.
+}
+PANORAMIC meta-analysis settings are also stored in
+\code{metadata(se)$panoramix$meta}.
 }
 \description{
-Writes pooled estimates into rowData: mu_hat, se_mu, tau2, Q, I2, k, p_mu.
+Random-effects meta-analysis of PANORAMIC features
+Perform feature-wise random-effects meta-analysis on PANORAMIC spatial
+statistics, optionally estimating separate between-sample variances
+(\eqn{\tau^2}) per group, which is recommended. Pooled estimates and diagnostics are written
+into \code{rowData(se)}.
+}
+\details{
+For each feature (cell-type pair and radius), the function fits a
+univariate random-effects model via \code{metafor::rma.uni()}, using
+the supplied \code{yi} and \code{vi} across samples. Features with
+fewer than 2 finite observations (and positive variances) receive
+\code{NA} for all meta-analytic quantities.
+
+When \code{group_col} is supplied, separate random-effects models are
+fitted within each group level, producing group-specific pooled
+effects and heterogeneity statistics. This supports differential
+colocalization analysis across biological conditions.
+}
+\examples{
+\dontrun{
+# Global pooling
+se_meta <- panoramic_meta(se)
+
+# Group-specific pooling by treatment
+se_meta <- panoramic_meta(se, group_col = "group")
+}
+
 }

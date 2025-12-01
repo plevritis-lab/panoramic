@@ -15,23 +15,37 @@ panoramic_prepare(
 )
 }
 \arguments{
-\item{spe_list}{named or unnamed list of SpatialExperiment (one per sample)}
+\item{spe_list}{Named or unnamed list of SpatialExperiment (one per sample)}
 
-\item{design}{data.frame/DataFrame with at least \code{sample}, \code{group}}
+\item{design}{data.frame with at least columns \code{sample}, \code{group} to map samples for meta-analysis. If only one group is used, give all the same group label.}
 
-\item{cell_type}{character scalar; name of colData column with cell type labels}
+\item{cell_type}{Character; name of SpatialExperiment colData column holding cell type labels}
 
-\item{min_cells}{integer; drop cell types with fewer than this per sample}
+\item{min_cells}{Integer. Cell types with fewer than this count (per sample) are dropped.}
 
-\item{concavity}{numeric passed to concaveman::concaveman()}
+\item{concavity}{Numeric passed to concaveman::concaveman(). Controls level of hull detail. 1 is highly detailed, \code{Inf} is a convex hull.}
 
-\item{window}{one of "concave","convex","rect"}
+\item{window}{one of "concave","convex","rect". Typically use concave.}
 
-\item{BPPARAM}{BiocParallel param for optional parallel prep}
+\item{BPPARAM}{BiocParallel param for optional parallel processing.}
 }
 \value{
-list of prepared SpatialExperiment with cached PPP in metadata
+List of SpatialExperiment objects with metadata slot \code{panoramic} containing \code{ppp}, cell-type table, spatial window, group/sample info.
 }
 \description{
-Prepare PANORAMIC inputs from a list of SpatialExperiment objects
+Creates SpatialExperiment objects ready for PANORAMIC spatial analyses.
+Cell type labels are harmonized, rare cell types (fewer than \code{min_cells}) are dropped per sample,
+and a spatial window is computed. Cached spatstat objects are stored within each SpatialExperiment's metadata.
+}
+\details{
+This step computes per-sample spatial windows to exclude background, filters
+rare cell types separately per sample, builds consistent cell-type factor levels,
+and caches spatstat objects and type tables for PANORAMIC's spatial statistics.
+}
+\examples{
+\dontrun{
+# For multiple samples: 
+prepped <- panoramic_prepare(spe_list, design, min_cells = 5)
+}
+
 }

@@ -123,6 +123,9 @@ panoramic_prepare <- function(
 #' Pipe-compatible null operator
 #' 
 #' Returns b if a is NULL, otherwise a. 
+#'
+#' @name null_coalesce
+#' @aliases %||%
 #' 
 #' @param a, b Objects to test; if a is NULL b is returned. 
 #' 

@@ -2,7 +2,7 @@
 % Please edit documentation in R/panoramic-spatialstats.R
 \name{panoramic}
 \alias{panoramic}
-\title{One-liner convenience: prepare + spatialstats}
+\title{PANORAMIC: prepare and compute spatial statistics}
 \usage{
 panoramic(
   spe_list,
@@ -11,7 +11,7 @@ panoramic(
   pairs = "auto",
   radii_um,
   stat = "Lcross",
-  nsim = 200,
+  nsim = 100,
   correction = "translate",
   min_cells = 5L,
   concavity = 50,
@@ -21,6 +21,51 @@ panoramic(
   BPPARAM = BiocParallel::SerialParam()
 )
 }
+\arguments{
+\item{spe_list}{Named or unnamed list of SpatialExperiment (one per sample)}
+
+\item{design}{data.frame with at least columns \code{sample}, \code{group} to map samples for meta-analysis. If only one group is used, give all the same group label.}
+
+\item{cell_type}{Character; name of SpatialExperiment colData column holding cell type labels}
+
+\item{pairs}{Either "auto" (generate all cell-type pairs including self-pairs)
+or a data.frame with columns \code{ct1}, \code{ct2}.}
+
+\item{radii_um}{Numeric vector of radii (microns) at which to evaluate the colocalization statistic.}
+
+\item{stat}{Character. Summary statistic ("Lcross", "Lest", "Kcross", "Kest").}
+
+\item{nsim}{Integer. Number of Loh bootstrap simulations per sample/pair.}
+
+\item{correction}{Chatacter. Edge correction method for spatstat ("translate", "border", ...).}
+
+\item{min_cells}{Integer. Cell types with fewer than this count (per sample) are dropped.}
+
+\item{concavity}{Numeric passed to concaveman::concaveman(). Controls level of hull detail. 1 is highly detailed, \code{Inf} is a convex hull.}
+
+\item{window}{one of "concave","convex","rect". Typically use concave.}
+
+\item{keep_boot}{Logical. Reserved for future use (keeping full bootstrap objects).}
+
+\item{seed}{Integer random seed for reproducible bootstrap simulations.}
+
+\item{BPPARAM}{BiocParallel param for optional parallel processing.}
+}
+\value{
+A SummerizedExperiment as described in \code{panoramic_spatialstats()}.
+}
 \description{
-One-liner convenience: prepare + spatialstats
+One-line convenience wrapper that calles \code{panoramic_prepare()} followed
+by \code{panoramic_spatialstats()} to produce the PANORAMIC
+SummarizedExperiment for donwnstream meta-analysis.
+}
+\examples{
+\dontrun{
+se <- panoramic(
+  spe_list, 
+  design=design, 
+  radii_um = c(50, 75, 100)
+)
+}
+
 }

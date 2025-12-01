@@ -2,16 +2,23 @@
 % Please edit documentation in R/panoramic-spatialstats.R
 \name{.panoramic_pairs}
 \alias{.panoramic_pairs}
-\title{Internal: generate CT pairs present in all/most samples}
+\title{Internal: generate cell-type pairs}
 \usage{
-.panoramic_pairs(
-  prep_list,
-  cell_type = "cell_type",
-  include_self = TRUE,
-  min_presence = 1
-)
+.panoramic_pairs(prep_list, include_self = TRUE, min_presence = 0)
+}
+\arguments{
+\item{prep_list}{List of prepared SpatialExperiment objects, each with \code{metadata(spe)$panoramic$ppp} containing a marked spatstat point pattern.}
+
+\item{include_self}{Logical. If \code{TRUE}, include (ct, ct) self-pairs. If \code{FALSE}, only cross-type pairs are returned.}
+
+\item{min_presence}{Numeric in \eqn{[0, 1]}. Minimum fraction of samples in which a cell type must appear to be included. \code{0} keeps all observed types, \code{0.5} requires presence in at least half of samples.}
+}
+\value{
+A data.frame with columns \code{ct1} and \code{ct2}.
 }
 \description{
-Internal: generate CT pairs present in all/most samples
+Construct the set of cell-type pairs to analyze, optionally including
+self-pairs and filtering to cell types present in at least a given
+fraction of samples.
 }
 \keyword{internal}

@@ -2,11 +2,21 @@
 % Please edit documentation in R/panoramic_prepare.R
 \name{.reorder_ccw}
 \alias{.reorder_ccw}
-\title{Internal: reorder hull vertices counterclockwise}
+\title{Internal: reorder hull vertices counterclockwise
+Orders a set of 2D coordinates counterclockwise around their centroid.
+Mainly used for convex spatial window construction to ensure correct polygon orientation for spatstat owin objects.}
 \usage{
 .reorder_ccw(coords)
 }
+\arguments{
+\item{coords}{Numeric matrix of coordinates (columns: x, y).}
+}
+\value{
+Reordered numeric matrix of coordinates
+}
 \description{
 Internal: reorder hull vertices counterclockwise
+Orders a set of 2D coordinates counterclockwise around their centroid.
+Mainly used for convex spatial window construction to ensure correct polygon orientation for spatstat owin objects.
 }
 \keyword{internal}

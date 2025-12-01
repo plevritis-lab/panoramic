@@ -128,7 +128,6 @@ panoramic_compare_groups <- function(se, group1 = "X1", group2 = "X2") {
 # #' @param tau2 tau^2 estimator for metafor::rma.uni ("SJ","REML","DL")
 # #' @param BPPARAM BiocParallel param (default SerialParam())
 # #' @return SummarizedExperiment with rowData augmented and metadata contrast set
-# #' @export
 # pano_test_groups <- function(se, group_col = "group",
 #                              case = NULL, control = NULL,
 #                              tau2 = "SJ",

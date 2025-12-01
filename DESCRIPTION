@@ -1,11 +1,34 @@
 Package: panoramic
-Title: What the Package Does (One Line, Title Case)
-Version: 0.0.0.9000
+Title: PANORAMIC: Meta-Analysis of Spatial Colocalization in Spatial Omics
+Version: 0.99.0
 Authors@R: 
-    person("First", "Last", , "first.last@example.com", role = c("aut", "cre"))
-Description: What the package does (one paragraph).
-License: `use_mit_license()`, `use_gpl3_license()` or friends to pick a
-    license
+    person("Jacob", "Chang", email = "jachang4@stanford.edu", role = c("aut", "cre"))
+Description: PANORAMIC provides a pipeline for quantifying and meta-analyzing
+    spatial colocalization between cell types in spatial omics experiments.
+    The package prepares SpatialExperiment inputs, computes Loh-bootstrap
+    spatial summary functions (e.g. L- and K-functions) for cell-type pairs
+    across samples, and performs random-effects meta-analysis to assess
+    group-level differences in spatial colocalization.
+License: MIT + file LICENSE
+Imports: 
+    dplyr, 
+    ggplot2, 
+    ggrepel, 
+    igraph, 
+    tidygraph, 
+    ggraph, 
+    rlang, 
+    S4Vectors, 
+    SummarizedExperiment, 
+    spatstat.geom, 
+    spatstat.explore, 
+    BiocParallel, 
+    SpatialExperiment, 
+    concaveman, 
+    metafor, 
+    withr, 
+    matrixStats
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
 RoxygenNote: 7.3.3
+biocViews: Spatial, SingleCell, MetaAnalysis, Bayesian, Visualization

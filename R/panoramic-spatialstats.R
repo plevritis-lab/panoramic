@@ -242,7 +242,9 @@
 #' @param nsim Integer. Number of Loh bootstrap simulations per sample/pair. 
 #' @param correction Chatacter. Edge correction method for spatstat ("translate", "border", ...). 
 #' @param keep_boot Logical. Reserved for future use (keeping full bootstrap objects). 
-#' 
+#' @param seed Integer random seed for reproducible bootstrap simulations.
+#' @param BPPARAM A BiocParallelParam object controlling parallelisation across samples.
+#'
 #' @return A SummarizedExperiment with : 
 #' \itemize{
 #'  \item assay "yi": centered estimates per (ct1, ct2, radius) feature and sample. 
