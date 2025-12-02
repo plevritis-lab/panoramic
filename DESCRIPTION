@@ -3,6 +3,8 @@ Title: PANORAMIC: Meta-Analysis of Spatial Colocalization in Spatial Omics
 Version: 0.99.0
 Authors@R: 
     person("Jacob", "Chang", email = "jachang4@stanford.edu", role = c("aut", "cre"))
+Author: Jacob Chang [aut, cre]
+Maintainer: Jacob Chang <jachang4@stanford.edu>
 Description: PANORAMIC provides a pipeline for quantifying and meta-analyzing
     spatial colocalization between cell types in spatial omics experiments.
     The package prepares SpatialExperiment inputs, computes Loh-bootstrap

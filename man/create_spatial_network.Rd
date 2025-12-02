@@ -44,3 +44,87 @@ spatial colocalization between cell-type pairs, based on the output of
 \code{z_diff} values (reduced colocalization in the case group) are
 encoded as edges, weighted by |z|.
 }
+\examples{
+library(SpatialExperiment)
+library(S4Vectors)
+library(BiocParallel)
+
+set.seed(1)
+
+make_spe <- function(n_cells, sample_id, group_label, bias_to_A = FALSE) {
+  coords <- cbind(
+    x = runif(n_cells, 0, 100),
+    y = runif(n_cells, 0, 100)
+  )
+
+  if (bias_to_A) {
+    ct <- ifelse(coords[, 1] > 30 & coords[, 1] < 70 &
+                   coords[, 2] > 30 & coords[, 2] < 70,
+                 "A", sample(c("A", "B"), size = n_cells, replace = TRUE))
+  } else {
+    ct <- sample(c("A", "B"), size = n_cells, replace = TRUE)
+  }
+
+  counts <- matrix(
+    rpois(5 * n_cells, lambda = 5),
+    nrow = 5,
+    dimnames = list(
+      paste0("gene", seq_len(5)),
+      paste0(sample_id, "_cell", seq_len(n_cells))
+    )
+  )
+
+  SpatialExperiment::SpatialExperiment(
+    assays = list(counts = counts),
+    colData = S4Vectors::DataFrame(
+      cell_type = ct,
+      sample_id = sample_id,
+      group     = group_label
+    ),
+    spatialCoords = coords
+  )
+}
+
+spe_list <- list(
+  sample1 = make_spe(80, "sample1", "control", bias_to_A = FALSE),
+  sample2 = make_spe(80, "sample2", "control", bias_to_A = FALSE),
+  sample3 = make_spe(80, "sample3", "control", bias_to_A = FALSE),
+  sample4 = make_spe(80, "sample4", "case",    bias_to_A = TRUE),
+  sample5 = make_spe(80, "sample5", "case",    bias_to_A = TRUE),
+  sample6 = make_spe(80, "sample6", "case",    bias_to_A = TRUE)
+)
+
+design <- data.frame(
+  sample = paste0("sample", 1:6),
+  group  = c(rep("control", 3), rep("case", 3)),
+  stringsAsFactors = FALSE
+)
+
+se_stats <- panoramic(
+  spe_list,
+  design      = design,
+  cell_type   = "cell_type",
+  radii_um    = 10,
+  stat        = "Lcross",
+  nsim        = 10,
+  correction  = "translate",
+  min_cells   = 5,
+  concavity   = 50,
+  window      = "rect",
+  seed        = 1,
+  BPPARAM     = BiocParallel::SerialParam()
+)
+
+se_meta <- panoramic_meta(se_stats, tau2 = "SJ", group_col = "group")
+se_diff <- panoramic_compare_groups(se_meta, group1 = "control", group2 = "case")
+
+# Build a spatial colocalization network; use relaxed FDR so example has edges
+net <- create_spatial_network(
+  se_diff,
+  fdr_threshold    = 1.0,
+  directed         = FALSE,
+  leiden_resolution = 0.8
+)
+
+net$graph
+}
