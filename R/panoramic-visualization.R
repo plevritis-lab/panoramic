@@ -393,7 +393,7 @@ plot_forest <- function(se_meta, ct1, ct2, radius_um = NULL,
   # infer group prefixes from colData and rowData column names
   groups <- unique(cd[[group_col]])
   if (length(groups) != 2L) {
-    stop("plot_forest2 currently expects exactly two groups in ", group_col, ".")
+    stop("plot_forest currently expects exactly two groups in ", group_col, ".")
   }
   grp_prefix <- make.names(groups)
   ctrl_pref  <- grp_prefix[1]
@@ -431,7 +431,7 @@ plot_forest <- function(se_meta, ct1, ct2, radius_um = NULL,
         ci_upper  = estimate + 1.96 * se,
         label     = "Pooled (RE)",
         stats_text = sprintf("%.2f (%.2f)", estimate, se),
-        tau2_text  = ifelse(!is.na(tau2), sprintf("tau2 = %.2f", tau2), "")
+        tau2_text  = ifelse(!is.na(tau2), sprintf("tau\u00b2 = %.2f", tau2), "")
       )
   }
   
@@ -448,7 +448,6 @@ plot_forest <- function(se_meta, ct1, ct2, radius_um = NULL,
       type = factor(type, levels = c("Individual", "Pooled")),
       group_offset = ifelse(group == unique(group)[1], 0,
                             max(row_within_group[group == unique(group)[1]]) + 2),
-      # small vertical offset so pooled points don't sit exactly on individuals
       y_pos = row_within_group + group_offset + ifelse(type == "Pooled", 0.2, 0)
     )
   
@@ -465,38 +464,38 @@ plot_forest <- function(se_meta, ct1, ct2, radius_um = NULL,
     ggplot2::geom_segment(
       ggplot2::aes(x = ci_lower, xend = ci_upper,
                    yend = y_pos, color = group),
-      linewidth = 0.5
+      linewidth = 0.4
     ) +
     ggplot2::geom_point(
       data = subset(plot_data, type == "Individual"),
       ggplot2::aes(x = estimate, color = group),
-      size = 2.5, shape = 15
+      size = 1.5, shape = 15
     ) +
     ggplot2::geom_point(
       data = subset(plot_data, type == "Pooled"),
       ggplot2::aes(x = estimate, color = group),
-      size = 4.5, shape = 18
+      size = 2.2, shape = 18
     ) +
     ggplot2::geom_text(
       ggplot2::aes(x = x_min - x_range * 0.02,
                    label = label,
                    color = group,
                    fontface = ifelse(type == "Pooled", "bold", "plain")),
-      hjust = 1, size = 3
+      hjust = 1, size = 2
     ) +
     ggplot2::geom_text(
       ggplot2::aes(x = x_max + x_range * 0.02,
                    label = stats_text,
                    color = group,
                    fontface = ifelse(type == "Pooled", "bold", "plain")),
-      hjust = 0, size = 3, family = "mono"
+      hjust = 0, size = 2, family = "mono"
     ) +
     ggplot2::geom_text(
       ggplot2::aes(x = x_max + x_range * 0.20,
                    label = sprintf("[%.2f, %.2f]", ci_lower, ci_upper),
                    color = group,
                    fontface = ifelse(type == "Pooled", "bold", "plain")),
-      hjust = 0, size = 3, family = "mono"
+      hjust = 0, size = 2, family = "mono"
     ) +
     {
       if (show_heterogeneity && !is.null(pooled_data)) {
@@ -505,7 +504,7 @@ plot_forest <- function(se_meta, ct1, ct2, radius_um = NULL,
           ggplot2::aes(x = x_max + x_range * 0.38,
                        label = tau2_text,
                        color = group),
-          hjust = 0, size = 2.8, fontface = "italic"
+          hjust = 0, size = 1.8, fontface = "italic"
         )
       }
     } +
@@ -523,19 +522,19 @@ plot_forest <- function(se_meta, ct1, ct2, radius_um = NULL,
       "text", x = x_min - x_range * 0.02,
       y = max(plot_data$y_pos) + 1,
       label = "Sample", hjust = 1,
-      fontface = "bold", size = 3.5
+      fontface = "bold", size = 2
     ) +
     ggplot2::annotate(
       "text", x = x_max + x_range * 0.02,
       y = max(plot_data$y_pos) + 1,
       label = "Est (SE)", hjust = 0,
-      fontface = "bold", size = 3.5
+      fontface = "bold", size = 2
     ) +
     ggplot2::annotate(
       "text", x = x_max + x_range * 0.20,
       y = max(plot_data$y_pos) + 1,
       label = "95% CI", hjust = 0,
-      fontface = "bold", size = 3.5
+      fontface = "bold", size = 2
     ) +
     {
       if (show_heterogeneity && !is.null(pooled_data)) {
@@ -543,7 +542,7 @@ plot_forest <- function(se_meta, ct1, ct2, radius_um = NULL,
           "text", x = x_max + x_range * 0.38,
           y = max(plot_data$y_pos) + 1,
           label = "Heterogeneity", hjust = 0,
-          fontface = "bold", size = 3.5
+          fontface = "bold", size = 2
         )
       }
     } +
@@ -555,15 +554,15 @@ plot_forest <- function(se_meta, ct1, ct2, radius_um = NULL,
                      gsub("[(){}]", "", ct2)),
       subtitle = "Random-effects meta-analysis with individual and pooled estimates"
     ) +
-    ggplot2::theme_classic(base_size = 11) +
+    ggplot2::theme_classic(base_size = 5) +
     ggplot2::theme(
       axis.text.y  = ggplot2::element_blank(),
       axis.ticks.y = ggplot2::element_blank(),
       axis.line.y  = ggplot2::element_blank(),
       legend.position = "bottom",
-      plot.title = ggplot2::element_text(face = "bold", size = 14),
+      plot.title = ggplot2::element_text(face = "bold", size = 8),
       panel.grid.major.x = ggplot2::element_line(color = "gray90"),
-      plot.margin = ggplot2::margin(10, 120, 10, 40)
+      plot.margin = ggplot2::margin(4, 60, 4, 20)
     ) +
     ggplot2::coord_cartesian(
       clip = "off",
@@ -572,6 +571,7 @@ plot_forest <- function(se_meta, ct1, ct2, radius_um = NULL,
   
   p
 }
+
 
 
 #' Construct spatial colocalization network from PANORAMIC results
