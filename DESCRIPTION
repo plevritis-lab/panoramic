@@ -2,15 +2,15 @@ Package: panoramic
 Title: PANORAMIC: Meta-Analysis of Spatial Colocalization in Spatial Omics
 Version: 0.99.0
 Authors@R: 
-    person("Jacob", "Chang", email = "jachang4@stanford.edu", role = c("aut", "cre"))
-Author: Jacob Chang [aut, cre]
-Maintainer: Jacob Chang <jachang4@stanford.edu>
+    person("Jacob", "Chang", email = "jachang4@stanford.edu", role = c("aut", "cre"), comment=c(ORCID="0000-0002-3719-7949"))
 Description: PANORAMIC provides a pipeline for quantifying and meta-analyzing
     spatial colocalization between cell types in spatial omics experiments.
     The package prepares SpatialExperiment inputs, computes Loh-bootstrap
     spatial summary functions (e.g. L- and K-functions) for cell-type pairs
     across samples, and performs random-effects meta-analysis to assess
     group-level differences in spatial colocalization.
+URL: https://github.com/plevritis-lab/panoramic
+BugReports: https://github.com/plevritis-lab/panoramic/issues    
 License: MIT + file LICENSE
 Imports: 
     dplyr, 
