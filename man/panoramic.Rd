@@ -60,12 +60,63 @@ by \code{panoramic_spatialstats()} to produce the PANORAMIC
 SummarizedExperiment for donwnstream meta-analysis.
 }
 \examples{
-\dontrun{
-se <- panoramic(
-  spe_list, 
-  design=design, 
-  radii_um = c(50, 75, 100)
-)
+library(SpatialExperiment)
+library(S4Vectors)
+library(BiocParallel)
+
+set.seed(1)
+
+make_spe <- function(n_cells, sample_id) {
+  coords <- cbind(
+    x = runif(n_cells, 0, 100),
+    y = runif(n_cells, 0, 100)
+  )
+  ct <- sample(c("A", "B"), size = n_cells, replace = TRUE)
+
+  counts <- matrix(
+    rpois(5 * n_cells, lambda = 5),
+    nrow = 5,
+    dimnames = list(
+      paste0("gene", seq_len(5)),
+      paste0(sample_id, "_cell", seq_len(n_cells))
+    )
+  )
+
+  SpatialExperiment::SpatialExperiment(
+    assays = list(counts = counts),
+    colData = S4Vectors::DataFrame(
+      cell_type = ct,
+      sample_id = sample_id
+    ),
+    spatialCoords = coords
+  )
 }
 
+spe1 <- make_spe(20, "sample1")
+spe2 <- make_spe(22, "sample2")
+
+spe_list <- list(sample1 = spe1, sample2 = spe2)
+
+design <- data.frame(
+  sample = c("sample1", "sample2"),
+  group  = c("group1", "group1"),
+  stringsAsFactors = FALSE
+)
+
+se_stats <- panoramic(
+  spe_list,
+  design      = design,
+  cell_type   = "cell_type",
+  radii_um    = c(10, 20),
+  stat        = "Lcross",
+  nsim        = 5,
+  correction  = "translate",
+  min_cells   = 2,
+  concavity   = 50,
+  window      = "rect",
+  seed        = 1,
+  BPPARAM     = BiocParallel::SerialParam()
+)
+
+se_stats
 }

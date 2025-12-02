@@ -50,9 +50,85 @@ independent estimates. The method is intended as a simple two-stage
 differential test leveraging the output of \code{panoramic_meta()}.
 }
 \examples{
-\dontrun{
-se_meta <- panoramic_meta(se, group_col = "group")
-se_cmp  <- pano_compare_groups(se_meta, group1 = "Control", group2 = "Treatment")
+library(SpatialExperiment)
+library(S4Vectors)
+library(BiocParallel)
+
+set.seed(1)
+
+make_spe <- function(n_cells, sample_id, group_label) {
+  coords <- cbind(
+    x = runif(n_cells, 0, 100),
+    y = runif(n_cells, 0, 100)
+  )
+  ct <- sample(c("A", "B"), size = n_cells, replace = TRUE)
+
+  counts <- matrix(
+    rpois(5 * n_cells, lambda = 5),
+    nrow = 5,
+    dimnames = list(
+      paste0("gene", seq_len(5)),
+      paste0(sample_id, "_cell", seq_len(n_cells))
+    )
+  )
+
+  SpatialExperiment::SpatialExperiment(
+    assays = list(counts = counts),
+    colData = S4Vectors::DataFrame(
+      cell_type = ct,
+      sample_id = sample_id,
+      group     = group_label
+    ),
+    spatialCoords = coords
+  )
 }
+
+# Two control and two case samples -------------------------------
+spe1 <- make_spe(20, "sample1", "control")
+spe2 <- make_spe(22, "sample2", "control")
+spe3 <- make_spe(24, "sample3", "case")
+spe4 <- make_spe(26, "sample4", "case")
+
+spe_list <- list(
+  sample1 = spe1,
+  sample2 = spe2,
+  sample3 = spe3,
+  sample4 = spe4
+)
+
+design <- data.frame(
+  sample = paste0("sample", 1:4),
+  group  = c("control", "control", "case", "case"),
+  stringsAsFactors = FALSE
+)
+
+# PANORAMIC spatial stats ---------------------------------------
+se_stats <- panoramic(
+  spe_list,
+  design      = design,
+  cell_type   = "cell_type",
+  radii_um    = c(10, 20),
+  stat        = "Lcross",
+  nsim        = 5,
+  correction  = "translate",
+  min_cells   = 2,
+  concavity   = 50,
+  window      = "rect",
+  seed        = 1,
+  BPPARAM     = BiocParallel::SerialParam()
+)
+
+# Group-specific meta-analysis and comparison -------------------
+se_meta <- panoramic_meta(se_stats, tau2 = "SJ", group_col = "group")
+
+# Column prefixes are make.names("control") and make.names("case"),
+# which are "control" and "case" here.
+se_diff <- panoramic_compare_groups(
+  se_meta,
+  group1 = "control",
+  group2 = "case"
+)
+
+se_diff
 
 }

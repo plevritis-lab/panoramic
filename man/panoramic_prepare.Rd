@@ -43,9 +43,55 @@ rare cell types separately per sample, builds consistent cell-type factor levels
 and caches spatstat objects and type tables for PANORAMIC's spatial statistics.
 }
 \examples{
-\dontrun{
-# For multiple samples: 
-prepped <- panoramic_prepare(spe_list, design, min_cells = 5)
-}
+library(SpatialExperiment)
+library(S4Vectors)
+
+set.seed(1)
+
+# Construct a minimal SpatialExperiment -----------------------------
+coords <- cbind(
+  x = runif(20, 0, 100),
+  y = runif(20, 0, 100)
+)
+
+ct <- sample(c("A", "B"), size = 20, replace = TRUE)
+
+counts <- matrix(
+  rpois(5 * 20, lambda = 5),
+  nrow = 5,
+  dimnames = list(paste0("gene", seq_len(5)), paste0("cell", seq_len(20)))
+)
+
+spe1 <- SpatialExperiment::SpatialExperiment(
+  assays = list(counts = counts),
+  colData = S4Vectors::DataFrame(
+    cell_type = ct,
+    sample_id = "sample1"
+  ),
+  spatialCoords = coords
+)
+
+spe_list <- list(sample1 = spe1)
+
+# Design with a single group ----------------------------------------
+design <- data.frame(
+  sample = "sample1",
+  group  = "group1",
+  stringsAsFactors = FALSE
+)
+
+# Run panoramic_prepare ---------------------------------------------
+prepped <- panoramic_prepare(
+  spe_list,
+  design      = design,
+  cell_type   = "cell_type",
+  min_cells   = 3,
+  concavity   = 50,
+  window      = "concave",
+  BPPARAM     = BiocParallel::SerialParam()
+)
+
+# Inspect cached spatstat objects in metadata
+names(prepped[[1]]@metadata$panoramic)
 
 }
