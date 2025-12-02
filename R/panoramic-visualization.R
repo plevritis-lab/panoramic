@@ -351,103 +351,116 @@ plot_forest <- function(se_meta, ct1, ct2, radius_um = NULL,
                         group_col = "group",
                         group_colors = NULL,
                         show_heterogeneity = TRUE) {
-
+  
   yi <- SummarizedExperiment::assay(se_meta, "yi")
   vi <- SummarizedExperiment::assay(se_meta, "vi")
   rd <- as.data.frame(SummarizedExperiment::rowData(se_meta))
   cd <- as.data.frame(SummarizedExperiment::colData(se_meta))
-
+  
   if (is.null(radius_um)) {
     radius_um <- rd$radius_um[1]
     message("Using radius: ", radius_um, " um")
   }
-
+  
+  # identify the row to plot
   row_idx <- which(rd$ct1 == ct1 & rd$ct2 == ct2 & rd$radius_um == radius_um)
-  if (length(row_idx) == 0) {
+  if (length(row_idx) == 0L) {
     stop("Cell pair ", ct1, ":", ct2, " at radius ", radius_um, " not found")
   }
   row_idx <- row_idx[1]
-
+  
   y_vals <- yi[row_idx, ]
   v_vals <- vi[row_idx, ]
-
+  
+  # individual-sample rows
   sample_data <- data.frame(
-    sample = colnames(yi),
+    sample  = colnames(yi),
     estimate = y_vals,
     variance = v_vals,
-    se = sqrt(v_vals),
-    group = cd[[group_col]],
-    type = "Individual",
+    se      = sqrt(v_vals),
+    group   = cd[[group_col]],
+    type    = "Individual",
     stringsAsFactors = FALSE
   ) |>
     dplyr::filter(!is.na(estimate) & !is.na(se)) |>
     dplyr::mutate(
-      ci_lower = estimate - 1.96 * se,
-      ci_upper = estimate + 1.96 * se,
-      label = sample,
+      ci_lower  = estimate - 1.96 * se,
+      ci_upper  = estimate + 1.96 * se,
+      label     = sample,
       stats_text = sprintf("%.2f (%.2f)", estimate, se)
     )
-
+  
+  # infer group prefixes from colData and rowData column names
+  groups <- unique(cd[[group_col]])
+  if (length(groups) != 2L) {
+    stop("plot_forest2 currently expects exactly two groups in ", group_col, ".")
+  }
+  grp_prefix <- make.names(groups)
+  ctrl_pref  <- grp_prefix[1]
+  case_pref  <- grp_prefix[2]
+  
+  ctrl_mu_col <- paste0(ctrl_pref, "_mu_hat")
+  case_mu_col <- paste0(case_pref, "_mu_hat")
+  ctrl_se_col <- paste0(ctrl_pref, "_se_mu")
+  case_se_col <- paste0(case_pref, "_se_mu")
+  ctrl_t2_col <- paste0(ctrl_pref, "_tau2")
+  case_t2_col <- paste0(case_pref, "_tau2")
+  
+  has_pooled <- all(c(ctrl_mu_col, case_mu_col, ctrl_se_col, case_se_col) %in% colnames(rd))
+  
   pooled_data <- NULL
-  tau2_control <- NA
-  tau2_case <- NA
-  I2_control <- NA
-  I2_case <- NA
-
-  if (all(c("mu_control", "se_control", "mu_case", "se_case") %in% colnames(rd))) {
-    groups <- unique(cd[[group_col]])
-
-    if ("tau2_control" %in% colnames(rd)) {
-      tau2_control <- rd$tau2_control[row_idx]
-      tau2_case <- rd$tau2_case[row_idx]
-    } else if ("tau2" %in% colnames(rd)) {
-      tau2_control <- tau2_case <- rd$tau2[row_idx]
-    }
-
-    if ("I2" %in% colnames(rd)) {
-      I2_control <- I2_case <- rd$I2[row_idx]
-    }
-
+  if (has_pooled) {
+    mu_ctrl <- rd[[ctrl_mu_col]][row_idx]
+    mu_case <- rd[[case_mu_col]][row_idx]
+    se_ctrl <- rd[[ctrl_se_col]][row_idx]
+    se_case <- rd[[case_se_col]][row_idx]
+    tau2_ctrl <- if (ctrl_t2_col %in% colnames(rd)) rd[[ctrl_t2_col]][row_idx] else NA_real_
+    tau2_case <- if (case_t2_col %in% colnames(rd)) rd[[case_t2_col]][row_idx] else NA_real_
+    
     pooled_data <- data.frame(
-      sample = c("Pooled (RE)", "Pooled (RE)"),
-      estimate = c(rd$mu_control[row_idx], rd$mu_case[row_idx]),
-      se = c(rd$se_control[row_idx], rd$se_case[row_idx]),
-      group = c(groups[1], groups[2]),
-      type = "Pooled",
-      tau2 = c(tau2_control, tau2_case),
+      sample  = c("Pooled (RE)", "Pooled (RE)"),
+      estimate = c(mu_ctrl, mu_case),
+      se       = c(se_ctrl, se_case),
+      group    = c(groups[1], groups[2]),
+      type     = "Pooled",
+      tau2     = c(tau2_ctrl, tau2_case),
       stringsAsFactors = FALSE
     ) |>
       dplyr::mutate(
-        ci_lower = estimate - 1.96 * se,
-        ci_upper = estimate + 1.96 * se,
-        label = "Pooled (RE)",
+        ci_lower  = estimate - 1.96 * se,
+        ci_upper  = estimate + 1.96 * se,
+        label     = "Pooled (RE)",
         stats_text = sprintf("%.2f (%.2f)", estimate, se),
-        tau2_text = ifelse(!is.na(tau2), sprintf("tau2 = %.2f", tau2), "")
+        tau2_text  = ifelse(!is.na(tau2), sprintf("tau2 = %.2f", tau2), "")
       )
   }
-
+  
+  if (is.null(pooled_data)) {
+    warning("No pooled group estimates found for this feature; showing individual samples only.")
+  }
+  
   plot_data <- dplyr::bind_rows(sample_data, pooled_data) |>
     dplyr::arrange(group, dplyr::desc(type), estimate) |>
     dplyr::group_by(group) |>
-    dplyr::mutate(
-      row_within_group = dplyr::row_number()
-    ) |>
+    dplyr::mutate(row_within_group = dplyr::row_number()) |>
     dplyr::ungroup() |>
     dplyr::mutate(
+      type = factor(type, levels = c("Individual", "Pooled")),
       group_offset = ifelse(group == unique(group)[1], 0,
                             max(row_within_group[group == unique(group)[1]]) + 2),
-      y_pos = row_within_group + group_offset
+      # small vertical offset so pooled points don't sit exactly on individuals
+      y_pos = row_within_group + group_offset + ifelse(type == "Pooled", 0.2, 0)
     )
-
+  
   if (is.null(group_colors)) {
     groups <- unique(plot_data$group)
-    group_colors <- stats::setNames(c("#1f77b4", "#d62728"), groups)
+    group_colors <- stats::setNames(c("#1f77b4", "#d62728")[seq_along(groups)], groups)
   }
-
-  x_min <- min(plot_data$ci_lower, na.rm = TRUE)
-  x_max <- max(plot_data$ci_upper, na.rm = TRUE)
+  
+  x_min   <- min(plot_data$ci_lower, na.rm = TRUE)
+  x_max   <- max(plot_data$ci_upper, na.rm = TRUE)
   x_range <- x_max - x_min
-
+  
   p <- ggplot2::ggplot(plot_data, ggplot2::aes(y = y_pos)) +
     ggplot2::geom_segment(
       ggplot2::aes(x = ci_lower, xend = ci_upper,
@@ -496,30 +509,42 @@ plot_forest <- function(se_meta, ct1, ct2, radius_um = NULL,
         )
       }
     } +
-    ggplot2::geom_vline(xintercept = 0, linetype = "dashed",
-                        color = "gray30", alpha = 0.5) +
+    ggplot2::geom_vline(
+      xintercept = 0,
+      linetype   = "dashed",
+      color      = "gray30",
+      alpha      = 0.5
+    ) +
     ggplot2::scale_color_manual(values = group_colors) +
     ggplot2::scale_x_continuous(
-      expand = ggplot2::expansion(mult = c(0.15, 0.50))
+      expand = ggplot2::expansion(mult = c(0.15, 0.5))
     ) +
-    ggplot2::annotate("text", x = x_min - x_range * 0.02,
-                      y = max(plot_data$y_pos) + 1,
-                      label = "Sample", hjust = 1,
-                      fontface = "bold", size = 3.5) +
-    ggplot2::annotate("text", x = x_max + x_range * 0.02,
-                      y = max(plot_data$y_pos) + 1,
-                      label = "Est (SE)", hjust = 0,
-                      fontface = "bold", size = 3.5) +
-    ggplot2::annotate("text", x = x_max + x_range * 0.20,
-                      y = max(plot_data$y_pos) + 1,
-                      label = "95% CI", hjust = 0,
-                      fontface = "bold", size = 3.5) +
+    ggplot2::annotate(
+      "text", x = x_min - x_range * 0.02,
+      y = max(plot_data$y_pos) + 1,
+      label = "Sample", hjust = 1,
+      fontface = "bold", size = 3.5
+    ) +
+    ggplot2::annotate(
+      "text", x = x_max + x_range * 0.02,
+      y = max(plot_data$y_pos) + 1,
+      label = "Est (SE)", hjust = 0,
+      fontface = "bold", size = 3.5
+    ) +
+    ggplot2::annotate(
+      "text", x = x_max + x_range * 0.20,
+      y = max(plot_data$y_pos) + 1,
+      label = "95% CI", hjust = 0,
+      fontface = "bold", size = 3.5
+    ) +
     {
       if (show_heterogeneity && !is.null(pooled_data)) {
-        ggplot2::annotate("text", x = x_max + x_range * 0.38,
-                          y = max(plot_data$y_pos) + 1,
-                          label = "Heterogeneity", hjust = 0,
-                          fontface = "bold", size = 3.5)
+        ggplot2::annotate(
+          "text", x = x_max + x_range * 0.38,
+          y = max(plot_data$y_pos) + 1,
+          label = "Heterogeneity", hjust = 0,
+          fontface = "bold", size = 3.5
+        )
       }
     } +
     ggplot2::labs(
@@ -528,13 +553,13 @@ plot_forest <- function(se_meta, ct1, ct2, radius_um = NULL,
       color = NULL,
       title = paste0(gsub("[(){}]", "", ct1), " : ",
                      gsub("[(){}]", "", ct2)),
-      subtitle = "Random-effects meta-analysis with individual sample estimates"
+      subtitle = "Random-effects meta-analysis with individual and pooled estimates"
     ) +
     ggplot2::theme_classic(base_size = 11) +
     ggplot2::theme(
-      axis.text.y = ggplot2::element_blank(),
+      axis.text.y  = ggplot2::element_blank(),
       axis.ticks.y = ggplot2::element_blank(),
-      axis.line.y = ggplot2::element_blank(),
+      axis.line.y  = ggplot2::element_blank(),
       legend.position = "bottom",
       plot.title = ggplot2::element_text(face = "bold", size = 14),
       panel.grid.major.x = ggplot2::element_line(color = "gray90"),
@@ -544,9 +569,10 @@ plot_forest <- function(se_meta, ct1, ct2, radius_um = NULL,
       clip = "off",
       ylim = c(0.5, max(plot_data$y_pos) + 1.5)
     )
-
+  
   p
 }
+
 
 #' Construct spatial colocalization network from PANORAMIC results
 #'
