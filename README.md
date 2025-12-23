@@ -9,7 +9,7 @@
 
 This package is currently under development for submission to Bioconductor. 
 
-![alt text](https://github.com/plevritis-lab/panoramic/blob/main/panoramic_graphic.png)
+![alt text](https://github.com/plevritis-lab/panoramic/blob/main/panoramic_graphic2.png)
 
 ## Installation
 ```r
