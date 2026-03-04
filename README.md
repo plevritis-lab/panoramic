@@ -13,6 +13,16 @@ This package is currently under development for submission to Bioconductor.
 
 ## Installation
 ```r
-devtools::install_github("plevritis-lab/panoramic")
+if (!requireNamespace("BiocManager", quietly = TRUE)) {
+  install.packages("BiocManager")
+}
+BiocManager::install("panoramic")
 library(panoramic)
+```
+
+To install the development version from GitHub (optional):
+
+```r
+# install.packages("remotes")
+remotes::install_github("plevritis-lab/panoramic")
 ```

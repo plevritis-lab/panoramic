@@ -18,7 +18,7 @@
   
   # Get cell types from each sample
   cts_by_sample <- lapply(prep_list, function(spe) {
-    levels(spatstat.geom::marks(spe@metadata$panoramic$ppp))
+    levels(spatstat.geom::marks(S4Vectors::metadata(spe)$panoramic$ppp))
   })
   
   # This includes cell types present in ANY sample
@@ -62,7 +62,10 @@
 #' @return A Loh bootstrap object as returned by \code{spatstat.explore::lohboot()}.
 #' 
 #' @keywords internal
-.lohboot_quiet <- function(...) {
+.lohboot_quiet <- function(..., verbose = FALSE) {
+  if (isTRUE(verbose)) {
+    return(spatstat.explore::lohboot(...))
+  }
   res <- NULL
   suppressWarnings(utils::capture.output({
     res <- spatstat.explore::lohboot(...)
@@ -192,7 +195,7 @@
 #' @keywords internal
 .one_pair_one_sample <- function(meta, ct1, ct2, stat = "Lcross",
                                  nsim = 100, correction = "translate",
-                                 radii_um) {
+                                 radii_um, verbose = FALSE) {
   tab <- meta$marks_tab
   n1 <- unname(tab[ct1]); n2 <- unname(tab[ct2])
   if (is.na(n1) || n1 < 2L || is.na(n2) || n2 < 2L) {
@@ -205,13 +208,15 @@
     fun <- if (stat == "Lcross") spatstat.explore::Lcross else spatstat.explore::Kcross
     loh <- .lohboot_quiet(
       spatstat.geom::subset.ppp(X, marks %in% c(ct1, ct2)),
-      fun, from = ct1, to = ct2, correction = correction, global = TRUE, nsim = nsim
+      fun, from = ct1, to = ct2, correction = correction, global = TRUE, nsim = nsim,
+      verbose = verbose
     )
   } else {
     fun <- if (grepl("^L", stat)) spatstat.explore::Lest else spatstat.explore::Kest
     loh <- .lohboot_quiet(
       spatstat.geom::subset.ppp(X, marks == ct1),
-      fun, correction = correction, global = TRUE, nsim = nsim
+      fun, correction = correction, global = TRUE, nsim = nsim,
+      verbose = verbose
     )
   }
   
@@ -244,6 +249,8 @@
 #' @param keep_boot Logical. Reserved for future use (keeping full bootstrap objects). 
 #' @param seed Integer random seed for reproducible bootstrap simulations.
 #' @param BPPARAM A BiocParallelParam object controlling parallelisation across samples.
+#' @param verbose Logical. If \code{TRUE}, show output from bootstrap calls.
+#'  If \code{FALSE} (default), suppress bootstrap console output.
 #'
 #' @return A SummarizedExperiment with : 
 #' \itemize{
@@ -324,7 +331,7 @@
 panoramic_spatialstats <- function(
     prep, pairs = "auto", radii_um, stat = "Lcross",
     nsim = 100, correction = "translate", keep_boot = FALSE, seed = 123,
-    BPPARAM = BiocParallel::SerialParam()
+    BPPARAM = BiocParallel::SerialParam(), verbose = FALSE
 ) {
   stopifnot(is.list(prep), length(prep) >= 2, length(radii_um) >= 1)
   if (identical(pairs, "auto")) {
@@ -338,7 +345,7 @@ panoramic_spatialstats <- function(
   # Compute per-sample per-pair curves
   withr::with_seed(seed, {
     per_sample <- BiocParallel::bplapply(samples, function(sid) {
-      meta <- prep[[sid]]@metadata$panoramic
+      meta <- S4Vectors::metadata(prep[[sid]])$panoramic
       
       cur <- lapply(seq_len(nrow(pairs)), function(i) {
         pr <- pairs[i, ]
@@ -348,7 +355,8 @@ panoramic_spatialstats <- function(
           stat       = stat,
           nsim       = nsim,
           correction = correction,
-          radii_um   = radii_um 
+          radii_um   = radii_um,
+          verbose    = verbose
         )
         names(df)[names(df) == "r"] <- "radius_um"
         df$ct1 <- pr$ct1
@@ -387,7 +395,7 @@ panoramic_spatialstats <- function(
   )
   colData <- S4Vectors::DataFrame(
     sample = samples,
-    group  = vapply(prep, function(s) s@metadata$panoramic$group_id, character(1))
+    group  = vapply(prep, function(s) S4Vectors::metadata(s)$panoramic$group_id, character(1))
   )
   
   se <- SummarizedExperiment::SummarizedExperiment(
@@ -405,14 +413,14 @@ panoramic_spatialstats <- function(
 
 #' PANORAMIC: prepare and compute spatial statistics
 #' 
-#' One-line convenience wrapper that calles \code{panoramic_prepare()} followed 
+#' One-line convenience wrapper that calls \code{panoramic_prepare()} followed 
 #' by \code{panoramic_spatialstats()} to produce the PANORAMIC
-#' SummarizedExperiment for donwnstream meta-analysis. 
+#' SummarizedExperiment for downstream meta-analysis. 
 #' 
 #' @inheritParams panoramic_prepare
 #' @inheritParams panoramic_spatialstats
 #' 
-#' @return A SummerizedExperiment as described in \code{panoramic_spatialstats()}. 
+#' @return A SummarizedExperiment as described in \code{panoramic_spatialstats()}. 
 #'
 #' @examples
 #' library(SpatialExperiment)
@@ -480,8 +488,10 @@ panoramic <- function(
     pairs = "auto", radii_um, stat = "Lcross", nsim = 100,
     correction = "translate", min_cells = 5L, concavity = 50, window = "concave",
     keep_boot = FALSE, seed = 123,
-    BPPARAM = BiocParallel::SerialParam()
+    BPPARAM = BiocParallel::SerialParam(), verbose = FALSE
 ) {
   prep <- panoramic_prepare(spe_list, design, cell_type, min_cells, concavity, window, BPPARAM)
-  panoramic_spatialstats(prep, pairs, radii_um, stat, nsim, correction, keep_boot, seed, BPPARAM)
+  panoramic_spatialstats(
+    prep, pairs, radii_um, stat, nsim, correction, keep_boot, seed, BPPARAM, verbose
+  )
 }

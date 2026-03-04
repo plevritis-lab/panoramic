@@ -1,140 +1,91 @@
 ---
 title: "PANORAMIC tutorial"
+output: BiocStyle::html_document
 vignette: >
   %\VignetteIndexEntry{PANORAMIC tutorial}
-  %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
+  %\VignetteEngine{knitr::rmarkdown}
+editor_options: 
+  markdown: 
+    wrap: 72
 ---
 
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
+```
 
 # Introduction
-Spatial transcriptomics experiments increasingly profile multiple samples across conditions, yet most statistical methods still perform colocalization analysis sample by sample, or rely on ad hoc aggregation of summary measures. The panoramic package (Pooled ANalysis Of vaRiance-aware Modeling and Inference of Colocalization) provides a principled meta-analytic framework for pooling spatial colocalization statistics across many samples while accounting for within-sample uncertainty and between-sample heterogeneity.
 
-PANORAMIC takes as input a collection of spatial omics samples, represented as SpatialExperiment objects, and computes spatial summary statistics (such as L-functions) for all pairs of cell types at user-specified radii. These summaries are then modeled using random-effects meta-analysis, enabling robust estimation of group-level spatial associations and formal testing of differences between biological conditions.
+Spatial omics studies often include multiple samples per condition.
+PANORAMIC provides a pooled framework for cell-type colocalization
+analysis across those samples, while accounting for both within-sample
+uncertainty and between-sample heterogeneity.
 
-Compared to existing tools that focus on single-sample spatial statistics or descriptive visualizations, PANORAMIC emphasizes pooled inference across experiments, explicit modeling of variance, and reproducible meta-analytic summaries of spatial colocalization. This makes it particularly well suited for multi-sample, multi-cohort spatial studies where rigorous cross-sample inference is required.
+This vignette walks through:
 
-```{r}
-# Installation 
-# devtools::install_github("plevritis-lab/panoramic")
+1.  Simulating a toy dataset with two "biological" groups.
+2.  Running the PANORAMIC workflow (preparation, spatial statistics,
+    pooling).
+3.  Testing differential colocalization between groups.
+4.  Interpreting tables and visualizations.
+
+# Installation
+
+```{r installation, eval=FALSE}
+if (!requireNamespace("BiocManager", quietly = TRUE)) {
+  install.packages("BiocManager")
+}
+BiocManager::install("panoramic")
 ```
 
+# Load packages
 
-```{r}
+```{r libraries, message=FALSE, warning=FALSE}
 library(panoramic)
 library(SpatialExperiment)
-library(dplyr)
-library(SpatialExperiment)
+library(SummarizedExperiment)
 library(S4Vectors)
 library(BiocParallel)
+library(dplyr)
 library(ggplot2)
-
-set.seed(123)
 ```
 
-First, we will simulate some spatial data with three cell types: (A), (B), and (C). The first group of samples will be randomly dispersed in the tissue area, while the second group of samples with exhibit more clustering of cell types. We will also create a design matrix to keep track of which samples belong to each group. 
-```{r}
-# Helper: turn a data.frame into a SpatialExperiment -----------------------
-df_to_spe <- function(df) {
-  stopifnot(all(c("sample", "x", "y", "cell_type") %in% colnames(df)))
+# Simulate example data
 
-  coords <- as.matrix(df[, c("x", "y")])
-  rownames(coords) <- paste0(df$sample, "_cell", seq_len(nrow(df)))
+We simulate six samples with three cell types: `(A)`, `(B)`, `(C)`.
+Group 1 has a mostly random spatial pattern. Group 2 is generated with
+stronger central colocalization between the first two cell types.
 
-  # dummy counts (not used by PANORAMIC)
-  expr <- matrix(
-    rpois(10 * nrow(df), lambda = 5),
-    nrow = 10,
-    dimnames = list(paste0("gene", seq_len(10)), rownames(coords))
-  )
-
-  SpatialExperiment::SpatialExperiment(
-    assays = list(counts = expr),
-    colData = S4Vectors::DataFrame(
-      cell_type = df$cell_type,
-      sample_id = df$sample
-    ),
-    spatialCoords = coords
-  )
-}
-
-# Simulate group 1 ---------------------------------------------------------
-group1_spe_list <- list()
-
-for (i in 1:3) {
-  n <- round(rnorm(n = 1, mean = 200, sd = 100))
-  n <- max(n, 50)  # ensure positive / nontrivial
-
-  x <- runif(n = n, min = 0, max = 100)
-  y <- runif(n = n, min = 0, max = 100)
-  cell_type <- sample(
-    x = c("(A)", "(B)", "(C)"),
-    size = n,
-    replace = TRUE
-  )
-
-  df <- data.frame(
-    sample    = paste0("sample_", i),
-    x         = x,
-    y         = y,
-    cell_type = cell_type,
-    stringsAsFactors = FALSE
-  )
-
-  group1_spe_list[[i]] <- df_to_spe(df)
-}
-
-names(group1_spe_list) <- paste0("sample_", 1:3)
-
-# Simulate group 2 ---------------------------------------------------------
-group2_spe_list <- list()
-
-for (j in 1:3) {
-  n <- round(rnorm(n = 1, mean = 400, sd = 100))
-  n <- max(n, 50)
-
-  x <- rnorm(n = n, mean = 50, sd = 20)
-  y <- rnorm(n = n, mean = 50, sd = 20)
-  cell_type <- sample(
-    x = c("(A)", "(B)", "(C)"),
-    size = n,
-    replace = TRUE
-  )
-
-  df <- data.frame(
-    sample    = paste0("sample_", j + 3),
-    x         = x,
-    y         = y,
-    cell_type = cell_type,
-    stringsAsFactors = FALSE
-  ) |>
-    dplyr::filter(dplyr::between(x, 0, 100) & dplyr::between(y, 0, 100))
-
-  group2_spe_list[[j]] <- df_to_spe(df)
-}
-
-names(group2_spe_list) <- paste0("sample_", 4:6)
-
-# Combine into one list for PANORAMIC -------------------------------------
-spe_list <- c(group1_spe_list, group2_spe_list)
-
-# Design data.frame mapping samples to groups ------------------------------
-design <- data.frame(
-  sample = paste0("sample_", 1:6),
-  group  = c(rep("group1", 3), rep("group2", 3)),
-  stringsAsFactors = FALSE
+```{r simulate_data, message=FALSE, warning=FALSE}
+set.seed(123)
+toy <- panoramic_simulate_dataset(
+  n_group1 = 3,
+  n_group2 = 3,
+  n_cells_group1 = 200,
+  n_cells_group2 = 350,
+  group_labels = c("group1", "group2"),
+  scenario_group1 = "random",
+  scenario_group2 = "colocalized",
+  seed = 123
 )
 
+spe_list <- toy$spe_list
+design <- toy$design
+design
 ```
 
-Visualize the samples. 
-```{r}
+Quick visual check of the simulated geometry:
+
+```{r plot_samples, message=FALSE, warning=FALSE}
 plot_df <- do.call(rbind, lapply(spe_list, function(spe) {
   coords <- SpatialExperiment::spatialCoords(spe)
-  df <- as.data.frame(coords)
-  df$cell_type <- colData(spe)$cell_type
-  df$sample_id <- colData(spe)$sample_id
-  df
+  data.frame(
+    x = coords[, 1],
+    y = coords[, 2],
+    cell_type = SummarizedExperiment::colData(spe)$cell_type,
+    sample_id = SummarizedExperiment::colData(spe)$sample_id,
+    stringsAsFactors = FALSE
+  )
 }))
 
 ggplot(plot_df, aes(x = x, y = y, color = cell_type)) +
@@ -143,63 +94,109 @@ ggplot(plot_df, aes(x = x, y = y, color = cell_type)) +
   coord_equal() +
   theme_bw() +
   labs(x = "x", y = "y", color = "Cell type")
-
-
 ```
-Next, we will run the PANORAMIC workflow. We will specify the spatial distance of colocalization a 10 micron, and we will use the Ripley's cross-L function as our spatial statistic. For now, we will use 50 simulations for our spatial bootstrapping, but when running this on real data, we recommend running nim >= 100. 
-```{r}
-# Preparation step and calculation of spatial statistics + bootstrapping. 
+
+# Run PANORAMIC workflow
+
+PANORAMIC has three major analysis steps:
+
+1.  `panoramic()`: prepares each sample and computes pairwise spatial
+    summaries (here: cross-L statistics at selected radii).
+2.  `panoramic_meta()`: performs random-effects pooling for each feature
+    (cell-type pair + radius) within each group.
+3.  `panoramic_compare_groups()`: tests whether pooled effects differ
+    between groups.
+
+Key parameters here:
+
+-   `radii_um`: distances (microns) where colocalization is summarized.
+-   `stat = "Lcross"`: cross-type Ripley's L statistic.
+-   `nsim`: Loh bootstrap simulations per sample/pair.
+-   `tau2 = "SJ"`: between-sample variance estimator in meta-analysis.
+    Comes from the `metafor` package.
+
+```{r run_workflow, message=FALSE, warning=FALSE}
 se <- panoramic(
-  spe_list,
-  design      = design,
-  cell_type   = "cell_type",
-  radii_um    = c(10),
-  stat        = "Lcross",
-  nsim        = 50,
-  BPPARAM     = BiocParallel::SerialParam()
+  spe_list = spe_list,
+  design = design,
+  cell_type = "cell_type",
+  radii_um = 10,
+  stat = "Lcross",
+  nsim = 50,
+  verbose = FALSE,
+  BPPARAM = BiocParallel::SerialParam()
 )
 
-# Meta-analysis step to pool estimates robustly across multiple spatial samples. 
 se_meta <- panoramic_meta(se, tau2 = "SJ", group_col = "group")
-
-# Differential testing step to compare colocalization estimates between groups. 
 se_diff <- panoramic_compare_groups(se_meta, group1 = "group1", group2 = "group2")
 ```
 
-```{r}
-# Inspect the meta-analysis outputs for a pair of cell-types
-plot_forest(se_meta, 
-            ct1 = "(A)", 
-            ct2 = "(B)", 
-            show_heterogeneity = TRUE)
+# Interpret pooled and differential outputs
+
+`rowData(se_diff)` contains one row per feature:
+
+-   feature identity (`ct1`, `ct2`, `radius_um`)
+-   pooled estimates and heterogeneity by group
+-   differential comparison (`beta_diff`, `p_diff`, `fdr_diff`)
+
+Biological interpretation:
+
+-   positive `beta_diff` means stronger colocalization in `group2` vs
+    `group1`
+-   negative `beta_diff` means weaker colocalization in `group2`
+-   small `fdr_diff` indicates a robust group difference after
+    multiplicity control
+
+```{r inspect_results, message=FALSE, warning=FALSE}
+res <- as.data.frame(SummarizedExperiment::rowData(se_diff))
+head(res[, c("ct1", "ct2", "radius_um", "beta_diff", "p_diff", "fdr_diff")])
+res %>% dplyr::filter(fdr_diff < 0.05)
 ```
 
+# Visualize results
 
-```{r}
-# Inspect the significant results after FDR correction 
-res <- as.data.frame(rowData(se_diff))
-res |> filter(fdr_diff < 0.05)
+Forest plot for one cell-type pair:
+
+```{r forest_plot, message=FALSE, warning=FALSE}
+plot_forest(
+  se_meta,
+  ct1 = "(A)",
+  ct2 = "(B)",
+  radius_um = 10,
+  group_col = "group",
+  show_heterogeneity = TRUE
+)
 ```
-```{r}
-# Visualize the results as a volcano-plot 
-# NOTE: this volcano plot is strange looking because only group2 displayed higher 
-# colocalization betweeen various pairs of cell types. 
+
+Volcano plot overview:
+
+```{r volcano_plot, message=FALSE, warning=FALSE}
 plot_volcano(se_diff)
 ```
 
-We can also visualize our differential testing results as a network and perform clustering to discover subnetworks of colocalization across mutliple cell types. In this toy example we only have three cell types, but in larger settings, you can see colocalization subnetworks of 2+ cell types. 
-```{r}
-net <- create_spatial_network(se_diff,
-                              fdr_threshold = 0.9,
-                              directed = FALSE, 
-                              leiden_resolution = 1.0)
-plot_spatial_network(net,
-                     layout = "fr",
-                     node_size_by = "degree") 
+Network summary:
 
+```{r network_plot, message=FALSE, warning=FALSE}
+net <- create_spatial_network(
+  se_diff,
+  fdr_threshold = 0.2,
+  directed = FALSE,
+  leiden_resolution = 1.0
+)
+plot_spatial_network(net, layout = "fr", node_size_by = "degree")
 ```
 
-```{r}
+# Related resources
+
+For complementary spatial analysis workflows, see:
+
+-   `spatstat` family (`spatstat.geom`, `spatstat.explore`) for
+    point-process spatial statistics.
+-   `SPIAT` for spatial histology and tumor microenvironment analyses.
+-   `imcRtools` for imaging mass cytometry spatial workflows.
+-   `spicyR` and `spatialFDA` for differential spatial localization
+    testing in imaging data.
+
+```{r session_info}
 sessionInfo()
 ```
-

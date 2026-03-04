@@ -92,6 +92,6 @@ prepped <- panoramic_prepare(
 )
 
 # Inspect cached spatstat objects in metadata
-names(prepped[[1]]@metadata$panoramic)
+names(S4Vectors::metadata(prepped[[1]])$panoramic)
 
 }

@@ -18,7 +18,8 @@ panoramic(
   window = "concave",
   keep_boot = FALSE,
   seed = 123,
-  BPPARAM = BiocParallel::SerialParam()
+  BPPARAM = BiocParallel::SerialParam(),
+  verbose = FALSE
 )
 }
 \arguments{
@@ -50,14 +51,17 @@ or a data.frame with columns \code{ct1}, \code{ct2}.}
 \item{seed}{Integer random seed for reproducible bootstrap simulations.}
 
 \item{BPPARAM}{BiocParallel param for optional parallel processing.}
+
+\item{verbose}{Logical. If \code{TRUE}, show output from bootstrap calls.
+If \code{FALSE} (default), suppress bootstrap console output.}
 }
 \value{
-A SummerizedExperiment as described in \code{panoramic_spatialstats()}.
+A SummarizedExperiment as described in \code{panoramic_spatialstats()}.
 }
 \description{
-One-line convenience wrapper that calles \code{panoramic_prepare()} followed
+One-line convenience wrapper that calls \code{panoramic_prepare()} followed
 by \code{panoramic_spatialstats()} to produce the PANORAMIC
-SummarizedExperiment for donwnstream meta-analysis.
+SummarizedExperiment for downstream meta-analysis.
 }
 \examples{
 library(SpatialExperiment)

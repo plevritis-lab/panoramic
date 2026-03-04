@@ -1,8 +1,9 @@
-#' Random-effects meta-analysis of PANORAMIC features 
-#' Perform feature-wise random-effects meta-analysis on PANORAMIC spatial 
+#' @title Random-effects meta-analysis of PANORAMIC features
+#' @description
+#' Perform feature-wise random-effects meta-analysis on PANORAMIC spatial
 #' statistics, optionally estimating separate between-sample variances
-#' (\eqn{\tau^2}) per group, which is recommended. Pooled estimates and diagnostics are written 
-#' into \code{rowData(se)}. 
+#' (\eqn{\tau^2}) per group. Pooled estimates and diagnostics are written
+#' into \code{rowData(se)}.
 #' 
 #' @param se A \code{SummarizedExperiment} produced by 
 #'  \code{panoramic_spatialstats()} or \code{panoramic()}, containing
@@ -25,7 +26,7 @@
 #'      is created per group, prefixed by a group label, e.g. \code{GroupA_mu_hat}, etc. 
 #' }
 #' PANORAMIC meta-analysis settings are also stored in 
-#' \code{metadata(se)$panoramix$meta}. 
+#' \code{metadata(se)$panoramic$meta}. 
 #' 
 #' @details
 #' For each feature (cell-type pair and radius), the function fits a

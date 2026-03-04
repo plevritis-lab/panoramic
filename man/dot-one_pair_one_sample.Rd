@@ -11,7 +11,8 @@
   stat = "Lcross",
   nsim = 100,
   correction = "translate",
-  radii_um
+  radii_um,
+  verbose = FALSE
 )
 }
 \arguments{

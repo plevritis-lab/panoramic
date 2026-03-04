@@ -13,7 +13,8 @@ panoramic_spatialstats(
   correction = "translate",
   keep_boot = FALSE,
   seed = 123,
-  BPPARAM = BiocParallel::SerialParam()
+  BPPARAM = BiocParallel::SerialParam(),
+  verbose = FALSE
 )
 }
 \arguments{
@@ -36,6 +37,9 @@ or a data.frame with columns \code{ct1}, \code{ct2}.}
 \item{seed}{Integer random seed for reproducible bootstrap simulations.}
 
 \item{BPPARAM}{A BiocParallelParam object controlling parallelisation across samples.}
+
+\item{verbose}{Logical. If \code{TRUE}, show output from bootstrap calls.
+If \code{FALSE} (default), suppress bootstrap console output.}
 }
 \value{
 A SummarizedExperiment with :

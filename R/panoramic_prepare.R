@@ -82,7 +82,7 @@
 #' )
 #'
 #' # Inspect cached spatstat objects in metadata
-#' names(prepped[[1]]@metadata$panoramic)
+#' names(S4Vectors::metadata(prepped[[1]])$panoramic)
 #'
 #' @export
 panoramic_prepare <- function(
@@ -108,14 +108,18 @@ panoramic_prepare <- function(
   # Per-sample prep function
   .prep_one <- function(sid) {
     spe <- spe_list[[sid]]
-    meta <- spe@metadata
+    meta <- S4Vectors::metadata(spe)
     meta$panoramic <- meta$panoramic %||% list()
     meta$panoramic$sample_id <- sid
     meta$panoramic$group_id  <- as.character(design$group[match(sid, design$sample)])
     
     # coords
-    coords <- tryCatch(SpatialExperiment::spatialCoords(spe),
-                       error = function(e) as.matrix(spe@int_colData$spatialCoords))
+    coords <- tryCatch(
+      SpatialExperiment::spatialCoords(spe),
+      error = function(e) {
+        stop("Failed to extract spatial coordinates for sample ", sid, ".", call. = FALSE)
+      }
+    )
     if (!is.matrix(coords) || ncol(coords) < 2) stop("Bad spatialCoords for ", sid)
     
     # filter rare cell types (per sample)
@@ -156,7 +160,7 @@ panoramic_prepare <- function(
     meta$panoramic$marks_tab    <- table(spatstat.geom::marks(ppp))
     meta$panoramic$results      <- list(colocalization_bootstrap = list())
     
-    spe@metadata <- meta
+    S4Vectors::metadata(spe) <- meta
     spe
   }
   

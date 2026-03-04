@@ -2,11 +2,7 @@
 % Please edit documentation in R/panoramic-meta.R
 \name{panoramic_meta}
 \alias{panoramic_meta}
-\title{Random-effects meta-analysis of PANORAMIC features
-Perform feature-wise random-effects meta-analysis on PANORAMIC spatial
-statistics, optionally estimating separate between-sample variances
-(\eqn{\tau^2}) per group, which is recommended. Pooled estimates and diagnostics are written
-into \code{rowData(se)}.}
+\title{Random-effects meta-analysis of PANORAMIC features}
 \usage{
 panoramic_meta(
   se,
@@ -41,13 +37,12 @@ The input \code{SummarizedExperiment}, with additional columns appended to \code
 is created per group, prefixed by a group label, e.g. \code{GroupA_mu_hat}, etc.
 }
 PANORAMIC meta-analysis settings are also stored in
-\code{metadata(se)$panoramix$meta}.
+\code{metadata(se)$panoramic$meta}.
 }
 \description{
-Random-effects meta-analysis of PANORAMIC features
 Perform feature-wise random-effects meta-analysis on PANORAMIC spatial
 statistics, optionally estimating separate between-sample variances
-(\eqn{\tau^2}) per group, which is recommended. Pooled estimates and diagnostics are written
+(\eqn{\tau^2}) per group. Pooled estimates and diagnostics are written
 into \code{rowData(se)}.
 }
 \details{

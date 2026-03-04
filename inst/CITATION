@@ -1,0 +1,20 @@
+citHeader("To cite PANORAMIC in publications, use:")
+
+bibentry(
+  bibtype = "Article",
+  title = "Multi-Sample and Multi-Group Spatial Colocalization Analysis Using PANORAMIC",
+  author = c(
+    person(given = "Jacob", family = "Chang"),
+    person(given = "Almudena", family = "Espín Pérez"),
+    person(given = "Perla", family = "Molina"),
+    person(given = "Rohit", family = "Khurana"),
+    person(given = "Weiruo", family = "Zhang"),
+    person(given = "Lu", family = "Tian"),
+    person(given = "Sylvia", family = "Plevritis")
+  ),
+  year = "2025",
+  journal = "bioRxiv",
+  note = "Preprint",
+  url = "https://www.biorxiv.org/content/10.1101/2025.09.18.677135v2",
+  doi = "10.1101/2025.09.18.677135"
+)

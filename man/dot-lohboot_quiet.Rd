@@ -4,7 +4,7 @@
 \alias{.lohboot_quiet}
 \title{Internal: quiet Loh bootstrap wrapper}
 \usage{
-.lohboot_quiet(...)
+.lohboot_quiet(..., verbose = FALSE)
 }
 \arguments{
 \item{...}{Arguments passed to \code{spatstat.explore::lohboot()}.}
