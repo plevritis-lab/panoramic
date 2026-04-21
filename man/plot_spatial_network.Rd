@@ -4,12 +4,46 @@
 \alias{plot_spatial_network}
 \title{Plot PANORAMIC spatial colocalization network}
 \usage{
-plot_spatial_network(net_result, layout = "fr", node_size_by = "degree")
+plot_spatial_network(
+  se_diff,
+  fdr_threshold = 0.05,
+  leiden_resolution = 1,
+  z_sign = c("both", "positive", "negative"),
+  include_nonsig = FALSE,
+  nonsig_max_fdr = 1,
+  directed = FALSE,
+  sig_operator = c("lt", "gt"),
+  layout = "fr",
+  node_size_by = "degree",
+  label_repel = TRUE,
+  label_box_padding = 0.2,
+  label_point_padding = 0.1,
+  label_force = 0.8,
+  return_net = FALSE
+)
 }
 \arguments{
-\item{net_result}{A list returned by \code{create_spatial_network()},
-containing at least a graph element (an igraph object)
-and summary statistics such as n_clusters and modularity.}
+\item{se_diff}{A SummarizedExperiment returned by
+\code{panoramic_meta_mv()}.}
+
+\item{fdr_threshold}{Numeric threshold used for significance and
+edge classification.}
+
+\item{leiden_resolution}{Numeric Leiden resolution passed to
+\code{create_spatial_network()}.}
+
+\item{z_sign}{Character sign filter for \code{z_diff}
+(\code{"both"}, \code{"positive"}, \code{"negative"}).}
+
+\item{include_nonsig}{Logical; include non-significant edges.}
+
+\item{nonsig_max_fdr}{Numeric max FDR retained when
+\code{include_nonsig = TRUE}.}
+
+\item{directed}{Logical; pass through to \code{create_spatial_network()}.}
+
+\item{sig_operator}{One of \code{"lt"} or \code{"gt"} passed through to
+\code{create_spatial_network()} for threshold direction.}
 
 \item{layout}{Character string specifying the graph layout passed to
 ggraph (e.g. "fr", "kk", "stress"). Default "fr".}
@@ -17,103 +51,47 @@ ggraph (e.g. "fr", "kk", "stress"). Default "fr".}
 \item{node_size_by}{Character name of a vertex attribute used to scale
 node sizes (e.g. "degree", "strength", "betweenness").
 Default "degree".}
+
+\item{label_repel}{Logical; if TRUE use repelled node labels.}
+
+\item{label_box_padding}{Numeric box padding for repelled labels.}
+
+\item{label_point_padding}{Numeric point padding for repelled labels.}
+
+\item{label_force}{Numeric repulsion force for labels.}
+
+\item{return_net}{Logical; if TRUE return a list with
+\code{plot} and \code{net}.}
 }
 \value{
-A ggplot object representing the network plot.
+A ggplot object by default, or a list with \code{plot} and
+\code{net} when \code{return_net = TRUE}.
 }
 \description{
-Visualize the spatial colocalization network constructed by
-\code{create_spatial_network()} using ggraph and tidygraph.
-Nodes represent cell types and edges represent significant differential
-colocalization, with edge width proportional to |z| and node size
-based on a chosen centrality measure.
+Wrapper to construct and visualize a PANORAMIC spatial colocalization network.
+It builds the directed network via \code{create_spatial_network()} and
+then renders it with ggraph/tidygraph.
 }
 \examples{
-library(SpatialExperiment)
-library(S4Vectors)
-library(BiocParallel)
-
-set.seed(1)
-
-make_spe <- function(n_cells, sample_id, group_label, bias_to_A = FALSE) {
-  coords <- cbind(
-    x = runif(n_cells, 0, 100),
-    y = runif(n_cells, 0, 100)
+se_diff <- SummarizedExperiment::SummarizedExperiment(
+  assays = list(dummy = matrix(0, nrow = 3, ncol = 1)),
+  rowData = S4Vectors::DataFrame(
+    ct1 = c("A", "A", "B"),
+    ct2 = c("B", "C", "C"),
+    z_diff = c(2.0, -1.5, 1.2),
+    p_diff = c(0.01, 0.03, 0.20),
+    fdr_diff = c(0.02, 0.05, 0.30)
   )
-
-  if (bias_to_A) {
-    ct <- ifelse(coords[, 1] > 30 & coords[, 1] < 70 &
-                   coords[, 2] > 30 & coords[, 2] < 70,
-                 "A", sample(c("A", "B"), size = n_cells, replace = TRUE))
-  } else {
-    ct <- sample(c("A", "B"), size = n_cells, replace = TRUE)
-  }
-
-  counts <- matrix(
-    rpois(5 * n_cells, lambda = 5),
-    nrow = 5,
-    dimnames = list(
-      paste0("gene", seq_len(5)),
-      paste0(sample_id, "_cell", seq_len(n_cells))
-    )
-  )
-
-  SpatialExperiment::SpatialExperiment(
-    assays = list(counts = counts),
-    colData = S4Vectors::DataFrame(
-      cell_type = ct,
-      sample_id = sample_id,
-      group     = group_label
-    ),
-    spatialCoords = coords
-  )
-}
-
-spe_list <- list(
-  sample1 = make_spe(80, "sample1", "control", bias_to_A = FALSE),
-  sample2 = make_spe(80, "sample2", "control", bias_to_A = FALSE),
-  sample3 = make_spe(80, "sample3", "control", bias_to_A = FALSE),
-  sample4 = make_spe(80, "sample4", "case",    bias_to_A = TRUE),
-  sample5 = make_spe(80, "sample5", "case",    bias_to_A = TRUE),
-  sample6 = make_spe(80, "sample6", "case",    bias_to_A = TRUE)
-)
-
-design <- data.frame(
-  sample = paste0("sample", 1:6),
-  group  = c(rep("control", 3), rep("case", 3)),
-  stringsAsFactors = FALSE
-)
-
-se_stats <- panoramic(
-  spe_list,
-  design      = design,
-  cell_type   = "cell_type",
-  radii_um    = 10,
-  stat        = "Lcross",
-  nsim        = 10,
-  correction  = "translate",
-  min_cells   = 5,
-  concavity   = 50,
-  window      = "rect",
-  seed        = 1,
-  BPPARAM     = BiocParallel::SerialParam()
-)
-
-se_meta <- panoramic_meta(se_stats, tau2 = "SJ", group_col = "group")
-se_diff <- panoramic_compare_groups(se_meta, group1 = "control", group2 = "case")
-
-net <- create_spatial_network(
-  se_diff,
-  fdr_threshold    = 1.0,
-  directed         = FALSE,
-  leiden_resolution = 0.8
 )
 
 if (requireNamespace("ggraph", quietly = TRUE) &&
     requireNamespace("tidygraph", quietly = TRUE)) {
   p_net <- plot_spatial_network(
-    net,
-    layout       = "fr",
+    se_diff,
+    fdr_threshold = 0.2,
+    z_sign = "both",
+    include_nonsig = TRUE,
+    layout = "fr",
     node_size_by = "degree"
   )
   print(p_net)

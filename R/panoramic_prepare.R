@@ -33,35 +33,14 @@
 #' rare cell types separately per sample, builds consistent cell-type factor levels, 
 #' and caches spatstat objects and type tables for PANORAMIC's spatial statistics. 
 #' @examples
-#' library(SpatialExperiment)
-#' library(S4Vectors)
-#'
-#' set.seed(1)
-#'
-#' # Construct a minimal SpatialExperiment -----------------------------
-#' coords <- cbind(
-#'   x = runif(20, 0, 100),
-#'   y = runif(20, 0, 100)
+#' spe_list <- list(
+#'   sample1 = panoramic_simulate_spe(
+#'     n_cells = 60,
+#'     sample_id = "sample1",
+#'     scenario = "random",
+#'     seed = 1
+#'   )
 #' )
-#'
-#' ct <- sample(c("A", "B"), size = 20, replace = TRUE)
-#'
-#' counts <- matrix(
-#'   rpois(5 * 20, lambda = 5),
-#'   nrow = 5,
-#'   dimnames = list(paste0("gene", seq_len(5)), paste0("cell", seq_len(20)))
-#' )
-#'
-#' spe1 <- SpatialExperiment::SpatialExperiment(
-#'   assays = list(counts = counts),
-#'   colData = S4Vectors::DataFrame(
-#'     cell_type = ct,
-#'     sample_id = "sample1"
-#'   ),
-#'   spatialCoords = coords
-#' )
-#'
-#' spe_list <- list(sample1 = spe1)
 #'
 #' # Design with a single group ----------------------------------------
 #' design <- data.frame(
@@ -91,13 +70,57 @@ panoramic_prepare <- function(
     BPPARAM = BiocParallel::SerialParam()
 ) {
   window <- match.arg(window)
-  stopifnot(is.list(spe_list), nrow(design) >= length(spe_list))
+  if (!is.list(spe_list) || length(spe_list) < 1L) {
+    stop("`spe_list` must be a non-empty list of SpatialExperiment objects.")
+  }
+  if (!is.data.frame(design)) {
+    stop("`design` must be a data.frame with columns `sample` and `group`.")
+  }
+  if (!all(c("sample", "group") %in% colnames(design))) {
+    stop("`design` must contain columns `sample` and `group`.")
+  }
+  design$sample <- as.character(design$sample)
+  design$group <- as.character(design$group)
+  if (anyNA(design$sample) || any(!nzchar(design$sample))) {
+    stop("`design$sample` must be non-missing and non-empty.")
+  }
+  if (anyNA(design$group) || any(!nzchar(design$group))) {
+    stop("`design$group` must be non-missing and non-empty.")
+  }
+  if (anyDuplicated(design$sample)) {
+    dups <- unique(design$sample[duplicated(design$sample)])
+    stop(
+      "`design$sample` contains duplicates: ",
+      paste(dups, collapse = ", "),
+      "."
+    )
+  }
+  if (nrow(design) < length(spe_list)) {
+    stop("`design` has fewer rows than `spe_list` length.")
+  }
   if (is.null(names(spe_list))) {
     # align by order
     names(spe_list) <- as.character(design$sample[seq_along(spe_list)])
   }
+  if (anyNA(names(spe_list)) || any(!nzchar(names(spe_list)))) {
+    stop("`spe_list` names must be non-missing and non-empty.")
+  }
   if (!all(names(spe_list) %in% design$sample))
     stop("All list names must appear in design$sample")
+  missing_cell_type <- names(spe_list)[!vapply(spe_list, function(spe) {
+    cell_type %in% colnames(SummarizedExperiment::colData(spe))
+  }, logical(1))]
+  if (length(missing_cell_type) > 0L) {
+    stop(
+      "Missing `cell_type` column `", cell_type, "` in samples: ",
+      paste(missing_cell_type, collapse = ", "),
+      "."
+    )
+  }
+  min_cells <- as.integer(min_cells)
+  if (!is.finite(min_cells) || length(min_cells) != 1L || min_cells < 1L) {
+    stop("`min_cells` must be a positive integer.")
+  }
   
   # Harmonize cell-type levels across samples
   all_ct <- unique(unlist(lapply(spe_list, function(spe) {
@@ -111,7 +134,11 @@ panoramic_prepare <- function(
     meta <- S4Vectors::metadata(spe)
     meta$panoramic <- meta$panoramic %||% list()
     meta$panoramic$sample_id <- sid
-    meta$panoramic$group_id  <- as.character(design$group[match(sid, design$sample)])
+    i_design <- match(sid, design$sample)
+    if (is.na(i_design)) {
+      stop("Sample `", sid, "` is missing from `design$sample`.", call. = FALSE)
+    }
+    meta$panoramic$group_id  <- as.character(design$group[i_design])
     
     # coords
     coords <- tryCatch(
@@ -121,6 +148,10 @@ panoramic_prepare <- function(
       }
     )
     if (!is.matrix(coords) || ncol(coords) < 2) stop("Bad spatialCoords for ", sid)
+    coords <- as.matrix(coords[, seq_len(2L), drop = FALSE])
+    if (any(!is.finite(coords))) {
+      stop("Non-finite spatial coordinates for sample ", sid, ".", call. = FALSE)
+    }
     
     # filter rare cell types (per sample)
     ct <- factor(SummarizedExperiment::colData(spe)[[cell_type]], levels = all_ct)
@@ -134,22 +165,63 @@ panoramic_prepare <- function(
       coords <- coords[keep, , drop = FALSE]
       ct <- ct[keep, drop = FALSE]      
     }
+    if (nrow(coords) < 1L) {
+      stop(
+        "No cells remain in sample `", sid, "` after filtering with `min_cells = ",
+        min_cells, "`.",
+        call. = FALSE
+      )
+    }
+    xr <- range(coords[, 1], na.rm = TRUE)
+    yr <- range(coords[, 2], na.rm = TRUE)
+    if (!all(is.finite(c(xr, yr))) || diff(xr) <= 0 || diff(yr) <= 0) {
+      stop(
+        "Sample `", sid, "` has degenerate coordinates (zero-area window) after filtering.",
+        call. = FALSE
+      )
+    }
     
     # window
+    make_rect_window <- function() {
+      spatstat.geom::owin(xr, yr)
+    }
     win <- switch(window,
                   concave = {
-                    hull <- concaveman::concaveman(coords, concavity = concavity)
-                    hull <- .reorder_ccw(hull)
-                    spatstat.geom::owin(poly = list(x = hull[,1], y = hull[,2]))
+                    if (nrow(coords) < 3L) {
+                      warning(
+                        "Sample `", sid, "` has <3 points after filtering; using rectangular window instead of concave hull.",
+                        call. = FALSE
+                      )
+                      make_rect_window()
+                    } else {
+                      hull <- try(concaveman::concaveman(coords, concavity = concavity), silent = TRUE)
+                      if (inherits(hull, "try-error") || !is.matrix(hull) || nrow(hull) < 3L) {
+                        warning(
+                          "Concave hull failed for sample `", sid, "`; using rectangular window.",
+                          call. = FALSE
+                        )
+                        make_rect_window()
+                      } else {
+                        hull <- .reorder_ccw(hull)
+                        spatstat.geom::owin(poly = list(x = hull[, 1], y = hull[, 2]))
+                      }
+                    }
                   },
                   convex = {
-                    ch <- grDevices::chull(coords[,1], coords[,2])
-                    hull <- .reorder_ccw(coords[ch, , drop = FALSE])
-                    spatstat.geom::owin(poly = list(x = hull[,1], y = hull[,2]))
+                    if (nrow(coords) < 3L) {
+                      warning(
+                        "Sample `", sid, "` has <3 points after filtering; using rectangular window instead of convex hull.",
+                        call. = FALSE
+                      )
+                      make_rect_window()
+                    } else {
+                      ch <- grDevices::chull(coords[, 1], coords[, 2])
+                      hull <- .reorder_ccw(coords[ch, , drop = FALSE])
+                      spatstat.geom::owin(poly = list(x = hull[, 1], y = hull[, 2]))
+                    }
                   },
                   rect = {
-                    xr <- range(coords[,1]); yr <- range(coords[,2])
-                    spatstat.geom::owin(xr, yr)
+                    make_rect_window()
                   }
     )
     

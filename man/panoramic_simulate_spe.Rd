@@ -7,7 +7,7 @@
 panoramic_simulate_spe(
   n_cells = 200L,
   sample_id = "sample_1",
-  cell_types = c("(A)", "(B)", "(C)"),
+  cell_types = c("A", "B", "C"),
   scenario = c("random", "colocalized"),
   bounds = c(0, 100),
   center = c(50, 50),

@@ -8,11 +8,16 @@
   meta,
   ct1,
   ct2,
-  stat = "Lcross",
+  stat = "local_comp_enrichment",
   nsim = 100,
   correction = "translate",
   radii_um,
-  verbose = FALSE
+  verbose = FALSE,
+  boot = c("approx", "block"),
+  tile_size = NULL,
+  nx = NULL,
+  ny = NULL,
+  local_comp_cache = NULL
 )
 }
 \arguments{
@@ -20,13 +25,28 @@
 
 \item{ct1, ct2}{Character. Cell-type labels.}
 
-\item{stat}{Character. Summary statistic ("Lcross", "Kcross", "Lest", "Kest").}
+\item{stat}{Character. Summary statistic. Default is
+\code{"local_comp_enrichment"}. Other options are \code{"Lcross"},
+\code{"Kcross"}, \code{"Lest"}, and \code{"Kest"}.}
 
 \item{nsim}{Integer. Number of Loh bootstrap simulations.}
 
 \item{correction}{Character. Edge correction passed to spatstat.}
 
 \item{radii_um}{Numeric vector of radii (microns) on which to summarize.}
+
+\item{boot}{Character. Bootstrap mode: \code{"approx"} (no tiling) or
+\code{"block"} (tiled Loh bootstrap).}
+
+\item{tile_size}{Optional numeric scalar giving tile size in the same units
+as spatial coordinates. Used only when \code{boot = "block"}.}
+
+\item{nx, ny}{Optional integers giving the number of tiles in x/y directions
+when \code{boot = "block"}.}
+
+\item{local_comp_cache}{Optional cache object from
+\code{.precompute_local_comp_cache()} to avoid repeated neighbor searches
+when \code{stat = "local_comp_enrichment"}.}
 }
 \value{
 A data.frame with columns \code{radius_um}, \code{yi}, and \code{vi}, filled with \code{NA} if insufficient cells of either type are present.

@@ -31,7 +31,7 @@
 panoramic_simulate_spe <- function(
     n_cells = 200L,
     sample_id = "sample_1",
-    cell_types = c("(A)", "(B)", "(C)"),
+    cell_types = c("A", "B", "C"),
     scenario = c("random", "colocalized"),
     bounds = c(0, 100),
     center = c(50, 50),
@@ -59,7 +59,7 @@ panoramic_simulate_spe <- function(
       
       ct <- ifelse(
         stats::runif(n_cells) < p_center,
-        sample(cell_types[1:2], size = n_cells, replace = TRUE),
+        sample(cell_types[seq_len(2L)], size = n_cells, replace = TRUE),
         sample(cell_types, size = n_cells, replace = TRUE)
       )
     }

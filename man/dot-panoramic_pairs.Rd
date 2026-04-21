@@ -11,7 +11,7 @@
 
 \item{include_self}{Logical. If \code{TRUE}, include (ct, ct) self-pairs. If \code{FALSE}, only cross-type pairs are returned.}
 
-\item{min_presence}{Numeric in \eqn{[0, 1]}. Minimum fraction of samples in which a cell type must appear to be included. \code{0} keeps all observed types, \code{0.5} requires presence in at least half of samples.}
+\item{min_presence}{Numeric in \eqn{[0, 1]}. Minimum fraction of samples in which a cell type must be observed (at least one cell) to be included. \code{0} keeps all observed types, \code{0.5} requires observed presence in at least half of samples.}
 }
 \value{
 A data.frame with columns \code{ct1} and \code{ct2}.

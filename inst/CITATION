@@ -5,7 +5,7 @@ bibentry(
   title = "Multi-Sample and Multi-Group Spatial Colocalization Analysis Using PANORAMIC",
   author = c(
     person(given = "Jacob", family = "Chang"),
-    person(given = "Almudena", family = "Espín Pérez"),
+    person(given = "Almudena", family = "Espin Perez"),
     person(given = "Perla", family = "Molina"),
     person(given = "Rohit", family = "Khurana"),
     person(given = "Weiruo", family = "Zhang"),

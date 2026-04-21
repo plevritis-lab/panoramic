@@ -6,129 +6,61 @@
 \usage{
 plot_volcano(
   se_diff,
-  fdr_threshold = 0.05,
-  effect_threshold = 5,
-  label_top = NULL,
+  sig_col = c("fdr_diff", "p_diff"),
+  alpha = 0.05,
+  x_scale = c("beta_diff", "log2fc"),
+  label_top = 12L,
+  label_text_pt = 4,
+  p_floor = 1e-300,
   title = NULL
 )
 }
 \arguments{
-\item{se_diff}{A SummarizedExperiment returned by
-\code{pano_compare_groups()}, where rowData(se_diff) contains at least
-ct1, ct2, beta_diff, p_diff, and fdr_diff.}
+\item{se_diff}{A \code{SummarizedExperiment} with contrast columns in
+\code{rowData(se_diff)} (at least \code{ct1}, \code{ct2},
+\code{beta_diff}, \code{p_diff}; and \code{fdr_diff} when
+\code{sig_col = "fdr_diff"}).}
 
-\item{fdr_threshold}{Numeric scalar. FDR threshold used to define
-significance for highlighting and labeling. Default is 0.05.}
+\item{sig_col}{Character, one of \code{"fdr_diff"} or \code{"p_diff"}.
+Controls which column determines significance coloring.}
 
-\item{effect_threshold}{Numeric scalar. Absolute effect size threshold
-|beta| used to highlight strong effects. Default is 5.}
+\item{alpha}{Numeric threshold for significance based on \code{sig_col}.}
 
-\item{label_top}{Optional integer. If non-NULL, only the top
-label_top pairs (smallest p_diff) among FDR-significant
-features are labeled. If NULL (default), all FDR-significant
-pairs are labeled.}
+\item{x_scale}{Character, one of \code{"beta_diff"} or \code{"log2fc"}.
+\code{"log2fc"} uses \code{sign(beta_diff) * log2(1 + abs(beta_diff))}.}
 
-\item{title}{Optional character string for a custom plot title. If
-NULL, a title is constructed from metadata(se_diff)$panoramic
-if available.}
+\item{label_top}{Integer number of significant hits to label. Use
+\code{NULL} or \code{0} to disable labels.}
+
+\item{label_text_pt}{Numeric font size (points) for significant-hit labels.}
+
+\item{p_floor}{Numeric floor applied to \code{p_diff} before
+\code{-log10()}.}
+
+\item{title}{Optional character title.}
 }
 \value{
-A ggplot object representing the volcano plot.
+A \code{ggplot} object.
 }
 \description{
-Create a volcano plot summarizing differential spatial colocalization
-results from PANORAMIC. Points represent cell-type pairs, with the
-x-axis showing effect sizes and the y-axis showing -log10(p)
-from \code{p_diff}. Significant pairs can be highlighted and labeled.
+Updated volcano helper based on the CRC TMA manuscript workflow.
+It uses \code{beta_diff} for the x-axis and \code{-log10(p_diff)} for
+the y-axis, and colors points by significance direction.
 }
 \examples{
-library(SpatialExperiment)
-library(S4Vectors)
-library(BiocParallel)
-
-set.seed(1)
-
-make_spe <- function(n_cells, sample_id, group_label, bias_to_A = FALSE) {
-  coords <- cbind(
-    x = runif(n_cells, 0, 100),
-    y = runif(n_cells, 0, 100)
+se_diff <- SummarizedExperiment::SummarizedExperiment(
+  assays = list(dummy = matrix(0, nrow = 2, ncol = 1)),
+  rowData = S4Vectors::DataFrame(
+    ct1 = c("A", "A"),
+    ct2 = c("B", "C"),
+    radius_um = c(10, 10),
+    beta_diff = c(0.4, -0.3),
+    p_diff = c(0.01, 0.20),
+    fdr_diff = c(0.02, 0.30)
   )
-
-  # Control: roughly equal A/B; Case: bias toward A within same window
-  if (bias_to_A) {
-    ct <- ifelse(coords[, 1] > 30 & coords[, 1] < 70 &
-                   coords[, 2] > 30 & coords[, 2] < 70,
-                 "A", sample(c("A", "B"), size = n_cells, replace = TRUE))
-  } else {
-    ct <- sample(c("A", "B"), size = n_cells, replace = TRUE)
-  }
-
-  counts <- matrix(
-    rpois(5 * n_cells, lambda = 5),
-    nrow = 5,
-    dimnames = list(
-      paste0("gene", seq_len(5)),
-      paste0(sample_id, "_cell", seq_len(n_cells))
-    )
-  )
-
-  SpatialExperiment::SpatialExperiment(
-    assays = list(counts = counts),
-    colData = S4Vectors::DataFrame(
-      cell_type = ct,
-      sample_id = sample_id,
-      group     = group_label
-    ),
-    spatialCoords = coords
-  )
-}
-
-# 3 control and 3 case samples -----------------------------------------
-spe_list <- list(
-  sample1 = make_spe(80, "sample1", "control", bias_to_A = FALSE),
-  sample2 = make_spe(80, "sample2", "control", bias_to_A = FALSE),
-  sample3 = make_spe(80, "sample3", "control", bias_to_A = FALSE),
-  sample4 = make_spe(80, "sample4", "case",    bias_to_A = TRUE),
-  sample5 = make_spe(80, "sample5", "case",    bias_to_A = TRUE),
-  sample6 = make_spe(80, "sample6", "case",    bias_to_A = TRUE)
 )
-
-design <- data.frame(
-  sample = paste0("sample", 1:6),
-  group  = c(rep("control", 3), rep("case", 3)),
-  stringsAsFactors = FALSE
-)
-
-se_stats <- panoramic(
-  spe_list,
-  design      = design,
-  cell_type   = "cell_type",
-  radii_um    = 10,
-  stat        = "Lcross",
-  nsim        = 10,
-  correction  = "translate",
-  min_cells   = 5,
-  concavity   = 50,
-  window      = "rect",
-  seed        = 1,
-  BPPARAM     = BiocParallel::SerialParam()
-)
-
-se_meta <- panoramic_meta(se_stats, tau2 = "SJ", group_col = "group")
-se_diff <- panoramic_compare_groups(se_meta, group1 = "control", group2 = "case")
-
-# Check that we have usable differential results
-summary(is.na(rowData(se_diff)$beta_diff))
-summary(is.na(rowData(se_diff)$p_diff))
-
-# Example: volcano plot (requires ggrepel)
-if (requireNamespace("ggrepel", quietly = TRUE)) {
-  p_vol <- plot_volcano(
-    se_diff,
-    fdr_threshold    = 1,
-    effect_threshold = 0.5,
-    label_top        = 5
-  )
-  print(p_vol)
-}
+m <- S4Vectors::metadata(se_diff)
+m$panoramic <- list(contrast = list(control = "control", case = "case"))
+S4Vectors::metadata(se_diff) <- m
+plot_volcano(se_diff, sig_col = "fdr_diff")
 }

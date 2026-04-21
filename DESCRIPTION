@@ -1,8 +1,8 @@
 Package: panoramic
-Title: PANORAMIC: Meta-Analysis of Spatial Colocalization in Spatial Omics
-Version: 0.99.2
+Title: Meta-Analysis of Spatial Colocalization in Spatial Omics
+Version: 0.99.3
 Authors@R: person("Jacob", "Chang", email = "jachang4@stanford.edu", role = c("aut", "cre", "fnd"), comment = c(ORCID = "0000-0002-3719-7949"))
-Description: PANORAMIC provides a pipeline for quantifying and meta-analyzing
+Description: Provides a pipeline for quantifying and meta-analyzing
     spatial colocalization between cell types in spatial omics experiments.
     The package prepares SpatialExperiment inputs, computes Loh-bootstrap
     spatial summary functions (e.g. L- and K-functions) for cell-type pairs
@@ -11,6 +11,7 @@ Description: PANORAMIC provides a pipeline for quantifying and meta-analyzing
 URL: https://github.com/plevritis-lab/panoramic
 BugReports: https://github.com/plevritis-lab/panoramic/issues    
 License: MIT + file LICENSE
+Depends: R (>= 4.6)
 Imports: 
     dplyr, 
     ggplot2, 
@@ -28,7 +29,8 @@ Imports:
     concaveman, 
     metafor, 
     withr, 
-    matrixStats
+    matrixStats,
+    spatstat.utils
 Suggests:
     knitr,
     rmarkdown,

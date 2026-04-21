@@ -4,13 +4,36 @@
 \alias{.lohboot_quiet}
 \title{Internal: quiet Loh bootstrap wrapper}
 \usage{
-.lohboot_quiet(..., verbose = FALSE)
+.lohboot_quiet(
+  X,
+  fun,
+  ...,
+  verbose = FALSE,
+  boot = c("approx", "block"),
+  tile_size = NULL,
+  nx = NULL,
+  ny = NULL
+)
 }
 \arguments{
 \item{...}{Arguments passed to \code{spatstat.explore::lohboot()}.}
+
+\item{boot}{Character. Bootstrap mode: \code{"approx"} (no tiling) or
+\code{"block"} (tiled Loh bootstrap with overlap-weighted blocks).}
+
+\item{tile_size}{Optional numeric scalar giving tile size in the same units
+as spatial coordinates. Used only when \code{boot = "block"}; translated
+into \code{nx} and \code{ny} for
+\code{lohboot()} based on the sample's window bounding box. Cannot be used
+with \code{nx}/\code{ny}.}
+
+\item{nx, ny}{Optional integers giving the number of tiles in x/y directions
+for \code{lohboot()} when \code{boot = "block"}. Ignored for
+\code{boot = "approx"}.}
 }
 \value{
-A Loh bootstrap object as returned by \code{spatstat.explore::lohboot()}.
+A Loh bootstrap object as returned by \code{spatstat.explore::lohboot()}
+or a compatible data.frame for \code{boot = "block"}.
 }
 \description{
 Run \code{spatstat.explore::lohboot()} while suppressing console output,

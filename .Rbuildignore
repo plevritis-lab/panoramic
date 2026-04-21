@@ -1,4 +1,12 @@
+^renv$
+^renv\.lock$
 ^panoramic\.Rproj$
 ^\.Rproj\.user$
 ^LICENSE\.md$
 ^\.github$
+^REVIEW_WORKSHEET\.md$
+^panoramic_graphic\.pdf$
+^panoramic_graphic\.png$
+^panoramic_graphic2\.png$
+^panoramic\.BiocCheck$
+^panoramic\.Rcheck$

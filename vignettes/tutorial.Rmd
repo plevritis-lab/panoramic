@@ -16,18 +16,24 @@ knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
 
 # Introduction
 
-Spatial omics studies often include multiple samples per condition.
-PANORAMIC provides a pooled framework for cell-type colocalization
-analysis across those samples, while accounting for both within-sample
-uncertainty and between-sample heterogeneity.
+PANORAMIC is designed for *multi-sample* spatial colocalization
+analysis. It estimates sample-level spatial effects, then pools them
+with multilevel meta-analysis to test group-level differences.
 
-This vignette walks through:
+Compared with single-sample analyses, PANORAMIC gives you:
 
-1.  Simulating a toy dataset with two "biological" groups.
-2.  Running the PANORAMIC workflow (preparation, spatial statistics,
-    pooling).
-3.  Testing differential colocalization between groups.
-4.  Interpreting tables and visualizations.
+-   uncertainty-aware pooling across samples
+-   explicit between-sample / between-patient heterogeneity modeling
+-   direct two-group contrasts (`beta_diff`, `p_diff`, `fdr_diff`)
+-   consistent table and plotting utilities for downstream
+    interpretation
+
+This vignette focuses on practical usage:
+
+1.  Build a toy multi-sample dataset.
+2.  Run PANORAMIC stepwise (prepare -\> spatial stats -\> pooling).
+3.  Run the one-call workflow helper (`panoramic_analyze()`).
+4.  Interpret outputs and generate publication-style plots.
 
 # Installation
 
@@ -42,19 +48,27 @@ BiocManager::install("panoramic")
 
 ```{r libraries, message=FALSE, warning=FALSE}
 library(panoramic)
-library(SpatialExperiment)
 library(SummarizedExperiment)
-library(S4Vectors)
 library(BiocParallel)
 library(dplyr)
 library(ggplot2)
 ```
 
-# Simulate example data
+# Workflow At A Glance
 
-We simulate six samples with three cell types: `(A)`, `(B)`, `(C)`.
-Group 1 has a mostly random spatial pattern. Group 2 is generated with
-stronger central colocalization between the first two cell types.
+| Step        | Function                   | Primary output                                                    | Why it matters                           |
+|:------------|:---------------------------|:------------------------------------------------------------------|:-----------------------------------------|
+| 1           | `panoramic_prepare()`      | list of prepared `SpatialExperiment`s with cached spatial objects | standardizes per-sample inputs           |
+| 2           | `panoramic_spatialstats()` | `SummarizedExperiment` with sample-level `yi` / `vi`              | quantifies within-sample spatial effects |
+| 3           | `panoramic_meta_mv()`      | pooled multilevel results + differential contrasts                | tests group-level biology                |
+| Convenience | `panoramic_analyze()`      | list with `prep`, `stats`, `pooled`, `tables`                     | one-call reproducible pipeline           |
+
+# Simulate Example Data
+
+We simulate two groups of samples with different spatial structure:
+
+-   `group1`: mostly random cell mixing
+-   `group2`: stronger local colocalization for early cell types
 
 ```{r simulate_data, message=FALSE, warning=FALSE}
 set.seed(123)
@@ -74,7 +88,7 @@ design <- toy$design
 design
 ```
 
-Quick visual check of the simulated geometry:
+Quick geometric sanity check:
 
 ```{r plot_samples, message=FALSE, warning=FALSE}
 plot_df <- do.call(rbind, lapply(spe_list, function(spe) {
@@ -96,106 +110,159 @@ ggplot(plot_df, aes(x = x, y = y, color = cell_type)) +
   labs(x = "x", y = "y", color = "Cell type")
 ```
 
-# Run PANORAMIC workflow
+# Step 1: Prepare Samples
 
-PANORAMIC has three major analysis steps:
-
-1.  `panoramic()`: prepares each sample and computes pairwise spatial
-    summaries (here: cross-L statistics at selected radii).
-2.  `panoramic_meta()`: performs random-effects pooling for each feature
-    (cell-type pair + radius) within each group.
-3.  `panoramic_compare_groups()`: tests whether pooled effects differ
-    between groups.
-
-Key parameters here:
-
--   `radii_um`: distances (microns) where colocalization is summarized.
--   `stat = "Lcross"`: cross-type Ripley's L statistic.
--   `nsim`: Loh bootstrap simulations per sample/pair.
--   `tau2 = "SJ"`: between-sample variance estimator in meta-analysis.
-    Comes from the `metafor` package.
-
-```{r run_workflow, message=FALSE, warning=FALSE}
-se <- panoramic(
+```{r prepare, message=FALSE, warning=FALSE}
+prep <- panoramic_prepare(
   spe_list = spe_list,
   design = design,
   cell_type = "cell_type",
-  radii_um = 10,
-  stat = "Lcross",
-  nsim = 50,
-  verbose = FALSE,
-  BPPARAM = BiocParallel::SerialParam()
+  min_cells = 5,
+  window = "concave"
 )
-
-se_meta <- panoramic_meta(se, tau2 = "SJ", group_col = "group")
-se_diff <- panoramic_compare_groups(se_meta, group1 = "group1", group2 = "group2")
+names(S4Vectors::metadata(prep[[1]])$panoramic)
 ```
 
-# Interpret pooled and differential outputs
+# Step 2: Compute Sample-Level Spatial Effects
 
-`rowData(se_diff)` contains one row per feature:
+Default PANORAMIC statistic is `stat = "local_comp_enrichment"`
+(percentage-point enrichment vs local null expectation).
 
--   feature identity (`ct1`, `ct2`, `radius_um`)
--   pooled estimates and heterogeneity by group
--   differential comparison (`beta_diff`, `p_diff`, `fdr_diff`)
+```{r spatial_stats, message=FALSE, warning=FALSE}
+radii_um <- c(25)
 
-Biological interpretation:
+se <- panoramic_spatialstats(
+  prep = prep,
+  radii_um = radii_um,
+  stat = "local_comp_enrichment",
+  nsim = 30,
+  seed = 123,
+  BPPARAM = BiocParallel::SerialParam()
+)
+dim(se)
+head(as.data.frame(rowData(se))[, c("ct1", "ct2", "radius_um", "stat")])
+```
 
--   positive `beta_diff` means stronger colocalization in `group2` vs
+# Step 3: Pool Across Samples And Test Group Differences
+
+`panoramic_meta_mv()` pools sample-level effects and computes
+differential contrasts between groups.
+
+```{r meta_mv, message=FALSE, warning=FALSE}
+# Here patient_col and sample_col are both "sample" in toy data.
+# In real data, patient_col can differ from sample_col (e.g., multiple cores per patient).
+
+se_meta <- panoramic_meta_mv(
+  se,
+  patient_col = "sample",
+  group_col = "group",
+  sample_col = "sample",
+  tau_structure = "patient",
+  method = "REML",
+  group_tau2 = "separate"
+)
+```
+
+# Interpret Pooled And Differential Outputs
+
+Each row in `rowData(se_meta)` is one feature (`ct1`, `ct2`,
+`radius_um`) with pooled effects and contrasts.
+
+For differential terms:
+
+-   positive `beta_diff`: stronger spatial effect in `group2` vs
     `group1`
--   negative `beta_diff` means weaker colocalization in `group2`
--   small `fdr_diff` indicates a robust group difference after
-    multiplicity control
+-   negative `beta_diff`: weaker spatial effect in `group2`
+-   small `fdr_diff`: stronger evidence after multiplicity correction
 
-```{r inspect_results, message=FALSE, warning=FALSE}
-res <- as.data.frame(SummarizedExperiment::rowData(se_diff))
+```{r extract_tables, message=FALSE, warning=FALSE}
+res <- panoramic_extract_contrast(se_meta)
 head(res[, c("ct1", "ct2", "radius_um", "beta_diff", "p_diff", "fdr_diff")])
 res %>% dplyr::filter(fdr_diff < 0.05)
 ```
 
-# Visualize results
+# One-Call Workflow (`panoramic_analyze`)
 
-Forest plot for one cell-type pair:
+Use `panoramic_analyze()` when you want a single reproducible entry
+point for end-to-end runs.
+
+```{r one_call, message=FALSE, warning=FALSE}
+out <- panoramic_analyze(
+  spe_list = spe_list,
+  design = design,
+  cell_type = "cell_type",
+  radii_um = radii_um,
+  nsim = 20,
+  min_cells = 5,
+  window = "concave",
+  BPPARAM = BiocParallel::SerialParam()
+)
+names(out)
+names(out$tables)
+```
+
+# Visualization Tools
+
+## Forest Plot (Feature-Level)
 
 ```{r forest_plot, message=FALSE, warning=FALSE}
 plot_forest(
   se_meta,
-  ct1 = "(A)",
-  ct2 = "(B)",
-  radius_um = 10,
-  group_col = "group",
-  show_heterogeneity = TRUE
+  ct1 = "A",
+  ct2 = "B",
+  radius_um = 25,
+  group_col = "group"
 )
 ```
 
-Volcano plot overview:
+## Volcano Plot (Global Differential Overview)
 
 ```{r volcano_plot, message=FALSE, warning=FALSE}
-plot_volcano(se_diff)
+plot_volcano(se_meta)
 ```
 
-Network summary:
+## Network Summary
 
 ```{r network_plot, message=FALSE, warning=FALSE}
 net <- create_spatial_network(
-  se_diff,
+  se_meta,
   fdr_threshold = 0.2,
   directed = FALSE,
   leiden_resolution = 1.0
 )
-plot_spatial_network(net, layout = "fr", node_size_by = "degree")
+plot_spatial_network(
+  se_meta,
+  fdr_threshold = 0.2,
+  directed = FALSE,
+  layout = "fr",
+  node_size_by = "degree"
+)
 ```
 
-# Related resources
+# Practical Notes
+
+-   Start with `local_comp_enrichment` unless you have a specific reason
+    to use L/K-function alternatives.
+-   Use at least two biological samples per group for stable contrasts.
+-   Increase `nsim` for final analyses (the vignette uses modest values
+    for speed).
+-   Keep sample metadata (`sample`, `group`, `patient`) explicit and
+    consistent early in your workflow.
+
+# Related Resources
 
 For complementary spatial analysis workflows, see:
 
--   `spatstat` family (`spatstat.geom`, `spatstat.explore`) for
-    point-process spatial statistics.
--   `SPIAT` for spatial histology and tumor microenvironment analyses.
--   `imcRtools` for imaging mass cytometry spatial workflows.
--   `spicyR` and `spatialFDA` for differential spatial localization
-    testing in imaging data.
+-   `r BiocStyle::CRANpkg("spatstat")` family
+    (`r BiocStyle::CRANpkg("spatstat.geom")`,
+    `r BiocStyle::CRANpkg("spatstat.explore")`) for point-process
+    spatial statistics.
+-   `r BiocStyle::Biocpkg("SPIAT")` for spatial histology and tumor
+    microenvironment analyses.
+-   `r BiocStyle::Biocpkg("imcRtools")` for imaging mass cytometry
+    spatial workflows.
+-   `r BiocStyle::Biocpkg("spicyR")` for differential spatial
+    localization testing in imaging data.
 
 ```{r session_info}
 sessionInfo()
